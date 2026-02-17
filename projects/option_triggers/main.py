@@ -46,7 +46,7 @@ from helpers.notify import send_telegram, send_telegram_file
 from helpers.report_utils import save_picks_to_excel, update_summary, format_excel
 from helpers.report_visuals import generate_visual_report, generate_summary_report
 from helpers.stock_picker import run_stock_picker
-from helpers.quantsapp_tools import _wait_and_get_table
+from helpers.quantsapp_tools import _wait_and_get_table, collect_all_tool_data, _clean_symbol
 
 
 # ── Logging ──────────────────────────────────────────────────
@@ -223,6 +223,10 @@ def fetch_option_triggers():
     return df
 
 
+# ── CLI Flags ────────────────────────────────────────────────
+TEST_MODE = "--test" in sys.argv  # Bypass 4-rule filter, run analysis on ALL scraped stocks
+
+
 # ── Core: Full 40-Minute Cycle ───────────────────────────────
 def run_cycle():
     """
@@ -267,9 +271,45 @@ def run_cycle():
 
         logger.info(f"Saved {len(triggers_df)} raw trigger rows to Excel")
 
-        # ── Step 3: Run 4-Rule Stock Picker ───────────────
-        logger.info("Running 4-Rule Stock Picker...")
-        picks, announcement = run_stock_picker(driver, triggers_df, cfg)
+        # ── Step 3: Run Stock Picker (or bypass in test mode) ──
+        if TEST_MODE:
+            # TEST MODE: Skip 4-rule filter, analyze ALL scraped symbols
+            logger.info("TEST MODE: Bypassing 4-rule filter — analyzing ALL scraped symbols")
+            send_telegram("TEST MODE: Bypassing 4-rule filter — analyzing all symbols")
+
+            # Find symbol column
+            sym_col = None
+            for col in triggers_df.columns:
+                if col.upper() in ["SYMBOL", "STOCK", "NAME", "SCRIP"]:
+                    sym_col = col
+                    break
+            if sym_col is None:
+                sym_col = triggers_df.columns[4] if len(triggers_df.columns) > 4 else triggers_df.columns[0]
+
+            symbols = triggers_df[sym_col].dropna().astype(str).str.strip().unique().tolist()
+            symbols = [_clean_symbol(s) for s in symbols if s]
+            logger.info(f"TEST MODE: Found {len(symbols)} symbols to analyze: {symbols}")
+
+            tool_urls = cfg.get("quantsapp_tools_urls", {})
+            wait_seconds = cfg.get("max_table_wait_seconds", 15)
+
+            picks = []
+            for symbol in symbols:
+                logger.info(f"TEST MODE: Collecting full analysis for {symbol}...")
+                try:
+                    tool_data = collect_all_tool_data(driver, symbol, tool_urls, wait_seconds)
+                    picks.append(tool_data)
+                except Exception as e:
+                    logger.error(f"TEST MODE: Failed for {symbol}: {e}")
+                    picks.append({
+                        "Symbol": symbol,
+                        "Analysis_Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "Error": str(e),
+                    })
+            announcement = f"TEST MODE: Analyzed {len(picks)} symbols"
+        else:
+            logger.info("Running 4-Rule Stock Picker...")
+            picks, announcement = run_stock_picker(driver, triggers_df, cfg)
 
         if not picks:
             msg = f"No stocks qualified after 4-rule filter at {cycle_start.strftime('%H:%M:%S')}"
@@ -445,8 +485,24 @@ _hours_label = _market_hours_label()
 _is_extended = _date.today() <= _EXTENDED_EXPIRY
 _mode_note = f" (EXTENDED until {_EXTENDED_EXPIRY})" if _is_extended else ""
 
-# First run – check market hours first
-if is_market_hours():
+# First run – check market hours (test mode always runs immediately)
+if TEST_MODE:
+    print("=" * 60)
+    print("  TEST MODE ACTIVE — Bypassing 4-rule filter")
+    print("  All scraped symbols will get full Columns G-N analysis")
+    print("=" * 60)
+    logger.info("TEST MODE: Running immediately, bypassing filters")
+    send_telegram(f"TEST MODE started — bypassing 4-rule filter, analyzing all symbols. Hours: {_hours_label}{_mode_note}")
+    run_cycle()
+    # In test mode, exit after one cycle
+    print("\nTEST MODE: Single cycle complete. Exiting.")
+    logger.info("TEST MODE: Single cycle complete. Exiting.")
+    try:
+        driver.quit()
+    except Exception:
+        pass
+    sys.exit(0)
+elif is_market_hours():
     logger.info("Running first cycle immediately on startup...")
     send_telegram(f"Option Triggers bot started — first scan running now. Hours: {_hours_label}{_mode_note}, every {interval} min.")
     run_cycle()
