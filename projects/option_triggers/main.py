@@ -69,37 +69,66 @@ with open("config.json") as f:
 
 
 # ── Setup Browser ────────────────────────────────────────────
+# Two modes:
+#   1. Attach to existing Chrome (if --remote-debugging-port is running)
+#   2. Launch new Chrome (fallback)
+
+DEBUGGING_PORT = cfg.get("chrome_debugging_port", 9222)
+
 options = webdriver.ChromeOptions()
-if cfg.get("headless"):
-    options.add_argument("--headless=new")
-options.add_argument("--start-maximized")
-options.add_argument("--disable-notifications")
 
-driver = webdriver.Chrome(
-    service=Service(ChromeDriverManager().install()),
-    options=options,
-)
+# Try attaching to an already-running Chrome with remote debugging
+attach_mode = False
+try:
+    import urllib.request
+    urllib.request.urlopen(f"http://127.0.0.1:{DEBUGGING_PORT}/json/version", timeout=2)
+    attach_mode = True
+except Exception:
+    pass
 
-# Navigate to Option Triggers page
-driver.get(cfg["start_url"])
+if attach_mode:
+    # ── Attach to existing Chrome session ──
+    options.add_experimental_option("debuggerAddress", f"127.0.0.1:{DEBUGGING_PORT}")
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=options,
+    )
+    print("=" * 60)
+    print("  OPTION TRIGGERS MODULE – Priority Project 1")
+    print("  (Attached to existing Chrome session)")
+    print("=" * 60)
+    print()
+    logger.info("Attached to existing Chrome on port %s", DEBUGGING_PORT)
 
-print("=" * 60)
-print("  OPTION TRIGGERS MODULE – Priority Project 1")
-print("=" * 60)
-print()
-print("STEP 1: Login to Quantsapp manually with OTP")
-print("STEP 2: Navigate to Option Triggers page")
-print("STEP 3: Make sure the following tabs/tools are accessible:")
-print("   - Option Triggers")
-print("   - IV Analysis (IVP)")
-print("   - OI Analysis")
-print("   - PCR Analysis")
-print("   - Buildup")
-print("   - Futures OI")
-print("   - Max Pain")
-print("   - Option Chain")
-print()
-input("Press Enter after login and setup is complete...")
+    # Navigate to Option Triggers page in existing browser
+    driver.get(cfg["start_url"])
+    time.sleep(3)
+else:
+    # ── Launch new Chrome ──
+    if cfg.get("headless"):
+        options.add_argument("--headless=new")
+    options.add_argument("--start-maximized")
+    options.add_argument("--disable-notifications")
+
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=options,
+    )
+    driver.get(cfg["start_url"])
+
+    print("=" * 60)
+    print("  OPTION TRIGGERS MODULE – Priority Project 1")
+    print("  (New Chrome window launched)")
+    print("=" * 60)
+    print()
+    print("STEP 1: Login to Quantsapp manually with OTP")
+    print("STEP 2: Navigate to Option Triggers page")
+    print("STEP 3: Make sure the following tabs/tools are accessible:")
+    print("   - Option Triggers / IV Analysis / OI Analysis")
+    print("   - PCR Analysis / Buildup / Futures OI / Max Pain / Option Chain")
+    print()
+    input("Press Enter after login and setup is complete...")
+    logger.info("New Chrome launched — user completed manual login.")
 
 
 # ── Core: Scrape Option Triggers Table ───────────────────────
