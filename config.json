@@ -1,6 +1,6 @@
 {
   "start_url": "https://web.quantsapp.com/unusual-option-activity",
-  "fetch_interval_minutes": 0.1,
+  "fetch_interval_minutes": 15,
   "output_file": "output/Quantsapp_Unusual_Activity.xlsx",
   "sheet_name": "Data_Log",
   "headless": false,
