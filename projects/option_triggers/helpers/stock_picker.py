@@ -165,23 +165,28 @@ def apply_rule_3(df, allowed_symbols):
 def _load_local_watchlist(cfg):
     """
     Load watchlist from local Excel file.
-    Config key: watchlist.local_file (path to .xlsx)
-    Falls back to watchlist/WBRam_Watchlist.xlsx
+    Tries primary path first, then fallback path.
+    Primary: D:\\Ram Claude\\2026\\Feb-Claude\\MP STOCKS SR FILE-M.xlsx
+    Fallback: watchlist/WBRam_Watchlist.xlsx
     """
     wl_cfg = cfg.get("watchlist", cfg.get("google_sheet", {}))
-    local_file = wl_cfg.get("local_file", "watchlist/WBRam_Watchlist.xlsx")
+    primary_file = wl_cfg.get("local_file", "watchlist/WBRam_Watchlist.xlsx")
+    fallback_file = wl_cfg.get("local_file_fallback", "watchlist/WBRam_Watchlist.xlsx")
 
-    if not os.path.exists(local_file):
-        logger.warning(f"Local watchlist not found: {local_file}")
-        return pd.DataFrame()
+    # Try primary path first, then fallback
+    for filepath in [primary_file, fallback_file]:
+        if not filepath:
+            continue
+        if os.path.exists(filepath):
+            try:
+                df = pd.read_excel(filepath)
+                logger.info(f"Loaded {len(df)} rows from watchlist: {filepath}")
+                return df
+            except Exception as e:
+                logger.warning(f"Failed to read {filepath}: {e}")
 
-    try:
-        df = pd.read_excel(local_file)
-        logger.info(f"Loaded {len(df)} rows from local watchlist: {local_file}")
-        return df
-    except Exception as e:
-        logger.error(f"Failed to read local watchlist: {e}")
-        return pd.DataFrame()
+    logger.warning(f"No watchlist found at: {primary_file} or {fallback_file}")
+    return pd.DataFrame()
 
 
 def _get_allowed_symbols_local(watchlist_df):

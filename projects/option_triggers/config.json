@@ -21,7 +21,8 @@
   "max_retry_attempts": 3,
 
   "watchlist": {
-    "local_file": "watchlist/WBRam_Watchlist.xlsx",
+    "local_file": "D:\\Ram Claude\\2026\\Feb-Claude\\MP STOCKS SR FILE-M.xlsx",
+    "local_file_fallback": "watchlist/WBRam_Watchlist.xlsx",
     "symbol_column": "A",
     "ltp_check_column": "O",
     "price_columns": ["P", "Q", "R"]
