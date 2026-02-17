@@ -411,10 +411,17 @@ def guarded_cycle():
 
 interval = cfg.get("fetch_interval_minutes", 40)
 
-# First run always executes immediately (force-run on startup)
-logger.info("Running first cycle immediately on startup...")
-send_telegram("Option Triggers bot started — first scan running now. Future cycles: 08:30-16:15 every 40 min.")
-run_cycle()
+# First run – check market hours first
+if is_market_hours():
+    logger.info("Running first cycle immediately on startup...")
+    send_telegram("Option Triggers bot started — first scan running now. Future cycles: 08:30-16:15 every 40 min.")
+    run_cycle()
+else:
+    now_str = datetime.now().strftime("%H:%M:%S")
+    msg = f"Option Triggers bot started at {now_str} (outside market hours 08:30-16:15). Waiting for market open..."
+    print(msg)
+    logger.info(msg)
+    send_telegram(msg)
 
 # Schedule every 40 minutes (guarded by market hours check)
 schedule.every(interval).minutes.do(guarded_cycle)

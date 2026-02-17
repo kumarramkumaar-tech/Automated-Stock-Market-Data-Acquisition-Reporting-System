@@ -2,12 +2,23 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# Try loading .env from CWD first, then from the project directory
-load_dotenv()
-if not os.getenv("TELEGRAM_TOKEN"):
-    # Resolve .env relative to this file's project directory
-    _project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    load_dotenv(os.path.join(_project_dir, ".env"))
+# Resolve .env from the project directory (where config.json lives)
+_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_env_path = os.path.join(_project_dir, ".env")
+
+# Create .env with default credentials if it doesn't exist
+if not os.path.exists(_env_path):
+    try:
+        with open(_env_path, "w") as f:
+            f.write("TELEGRAM_TOKEN=8431734536:AAEMcfw0MrjrDGCJSmDwNI-iHhcHhLvVMoI\n")
+            f.write("TELEGRAM_CHAT_ID=596635373\n")
+        print(f"Created .env at {_env_path}")
+    except Exception:
+        pass
+
+# Load .env from project directory first, then CWD as fallback
+load_dotenv(_env_path)
+load_dotenv()  # Also try CWD in case user has a custom .env
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
