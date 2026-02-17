@@ -1,0 +1,12 @@
+{
+  "start_url": "https://web.quantsapp.com/fii-dii-data",
+  "nse_fii_dii_url": "https://www.nseindia.com/api/fiidiiTradeReact",
+  "fetch_interval_minutes": 60,
+  "output_file": "output/FII_DII_Activity.xlsx",
+  "sheet_name": "Daily_Flow",
+  "headless": false,
+  "max_table_wait_seconds": 15,
+  "auto_refresh_page": true,
+  "max_retry_attempts": 3,
+  "track_segments": ["Cash", "F&O"]
+}

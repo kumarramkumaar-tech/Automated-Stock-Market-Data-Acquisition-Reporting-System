@@ -1,0 +1,12 @@
+{
+  "start_url": "https://web.quantsapp.com/unusual-option-activity",
+  "fetch_interval_minutes": 30,
+  "output_file": "output/Buildup_Patterns.xlsx",
+  "sheet_name": "Pattern_Log",
+  "headless": false,
+  "max_table_wait_seconds": 15,
+  "auto_refresh_page": true,
+  "max_retry_attempts": 3,
+  "buildup_types": ["Long Buildup", "Short Buildup", "Long Unwinding", "Short Covering"],
+  "alert_on_reversal": true
+}

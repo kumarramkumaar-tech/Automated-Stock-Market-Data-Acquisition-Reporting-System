@@ -1,0 +1,12 @@
+{
+  "start_url": "https://web.quantsapp.com/option-chain",
+  "fetch_interval_minutes": 15,
+  "output_file": "output/Options_Chain_Analysis.xlsx",
+  "sheet_name": "Chain_Log",
+  "headless": false,
+  "max_table_wait_seconds": 20,
+  "auto_refresh_page": true,
+  "max_retry_attempts": 3,
+  "default_symbol": "NIFTY",
+  "symbols_to_track": ["NIFTY", "BANKNIFTY"]
+}

@@ -1,0 +1,16 @@
+{
+  "start_url": "https://web.quantsapp.com/unusual-option-activity",
+  "fetch_interval_minutes": 30,
+  "output_file": "output/Stock_Of_The_Day.xlsx",
+  "sheet_name": "Data_Log",
+  "headless": false,
+  "max_table_wait_seconds": 15,
+  "auto_refresh_page": true,
+  "max_retry_attempts": 3,
+  "top_n_stocks": 5,
+  "scoring_weights": {
+    "oi_change": 0.4,
+    "volume_spike": 0.3,
+    "price_momentum": 0.3
+  }
+}
