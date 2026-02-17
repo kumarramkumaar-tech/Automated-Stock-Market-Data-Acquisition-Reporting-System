@@ -9,11 +9,12 @@
 # and generate the announcement.
 
 import os
+import re
 import logging
 import pandas as pd
 from datetime import datetime
 
-from helpers.quantsapp_tools import collect_all_tool_data
+from helpers.quantsapp_tools import collect_all_tool_data, _clean_symbol
 from helpers.notify import send_telegram
 
 logger = logging.getLogger(__name__)
@@ -156,7 +157,9 @@ def apply_rule_3(df, allowed_symbols):
 
     df = df.copy()
     allowed_upper = [s.upper() for s in allowed_symbols]
-    filtered = df[df[symbol_col].astype(str).str.strip().str.upper().isin(allowed_upper)].copy()
+    # Clean symbols (strip expiry dates) before matching against watchlist
+    df["_clean_symbol"] = df[symbol_col].astype(str).str.strip().apply(_clean_symbol)
+    filtered = df[df["_clean_symbol"].isin(allowed_upper)].copy()
 
     logger.info(f"Rule 3: {len(filtered)} stocks match watchlist (from {len(allowed_symbols)} allowed)")
     return filtered
@@ -361,7 +364,9 @@ def run_stock_picker(driver, triggers_df, cfg):
     if symbol_col is None:
         symbol_col = r3.columns[0]
 
-    passing_symbols = r3[symbol_col].astype(str).str.strip().str.upper().unique().tolist()
+    passing_symbols = [
+        _clean_symbol(s) for s in r3[symbol_col].astype(str).str.strip().str.upper().unique().tolist()
+    ]
 
     # --- Apply Rule 4: LTP Column O = TRUE + price check ---
     logger.info("Applying Rule 4: LTP Column O check...")

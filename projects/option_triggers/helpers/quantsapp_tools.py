@@ -15,6 +15,7 @@
 #   8. Multi Strike OI  – Strike-wise OI breakdown
 #   9. Option Chain     – Full chain with Greeks
 
+import re
 import time
 import logging
 import pandas as pd
@@ -26,6 +27,25 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_symbol(symbol):
+    """
+    Extract only the stock symbol name, stripping any expiry date suffix.
+    e.g. "RBLBANK 24-FEB-26" -> "RBLBANK"
+         "JSWSTEEL 24-FEB-26" -> "JSWSTEEL"
+         "RELIANCE" -> "RELIANCE"
+    """
+    if not symbol:
+        return symbol
+    # Remove date patterns like "24-FEB-26", "24-Feb-2026", "2026-02-24", etc.
+    cleaned = re.sub(r'\s+\d{1,2}-[A-Za-z]{3}-\d{2,4}', '', symbol).strip()
+    cleaned = re.sub(r'\s+\d{4}-\d{2}-\d{2}', '', cleaned).strip()
+    cleaned = re.sub(r'\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4}', '', cleaned).strip()
+    # Fallback: just take the first word (the symbol name)
+    if ' ' in cleaned:
+        cleaned = cleaned.split()[0]
+    return cleaned.upper()
 
 
 def _wait_and_get_table(driver, wait_seconds=15):
@@ -612,6 +632,12 @@ def collect_all_tool_data(driver, symbol, tool_urls, wait_seconds=15):
       FUT_ = Futures OI
       MP_  = Max Pain
     """
+    # Strip expiry date from symbol – use only the stock name for Quantsapp search
+    clean_sym = _clean_symbol(symbol)
+    if clean_sym != symbol:
+        logger.info(f"Cleaned symbol: '{symbol}' -> '{clean_sym}'")
+    symbol = clean_sym
+
     logger.info(f"Collecting all tool data for {symbol}...")
     all_data = {"Symbol": symbol, "Analysis_Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
