@@ -1,6 +1,6 @@
 # main.py – Option Triggers Module (Priority Project 1)
 #
-# MARKET HOURS: Runs only between 08:30 AM - 04:15 PM IST
+# MARKET HOURS: Normal 08:30-16:15 IST; Extended 07:00-21:00 until 2026-02-20
 #
 # Automated 40-minute cycle that:
 #   1. Opens Quantsapp Option Triggers page
@@ -383,17 +383,45 @@ def pre_cycle():
 
 
 # ── Market Hours Config ──────────────────────────────────────
-MARKET_OPEN_HOUR = 8
-MARKET_OPEN_MIN = 30     # 08:30 AM
-MARKET_CLOSE_HOUR = 16
-MARKET_CLOSE_MIN = 15    # 04:15 PM
+# Extended window: 7 AM - 9 PM for 3 days (expires 2026-02-20)
+# After expiry, reverts to normal 08:30-16:15
+from datetime import date as _date
+
+_EXTENDED_EXPIRY = _date(2026, 2, 20)  # 3 days from 2026-02-17
+
+# Normal market hours
+_NORMAL_OPEN_HOUR = 8
+_NORMAL_OPEN_MIN = 30
+_NORMAL_CLOSE_HOUR = 16
+_NORMAL_CLOSE_MIN = 15
+
+# Extended hours
+_EXTENDED_OPEN_HOUR = 7
+_EXTENDED_OPEN_MIN = 0
+_EXTENDED_CLOSE_HOUR = 21
+_EXTENDED_CLOSE_MIN = 0
+
+
+def _get_market_hours():
+    """Return (open_hour, open_min, close_hour, close_min) based on date."""
+    today = _date.today()
+    if today <= _EXTENDED_EXPIRY:
+        return _EXTENDED_OPEN_HOUR, _EXTENDED_OPEN_MIN, _EXTENDED_CLOSE_HOUR, _EXTENDED_CLOSE_MIN
+    return _NORMAL_OPEN_HOUR, _NORMAL_OPEN_MIN, _NORMAL_CLOSE_HOUR, _NORMAL_CLOSE_MIN
+
+
+def _market_hours_label():
+    """Return human-readable market hours string."""
+    oh, om, ch, cm = _get_market_hours()
+    return f"{oh:02d}:{om:02d}-{ch:02d}:{cm:02d}"
 
 
 def is_market_hours():
-    """Check if current time is within 08:30 AM - 04:15 PM."""
+    """Check if current time is within the active market hours window."""
     now = datetime.now()
-    market_open = now.replace(hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MIN, second=0, microsecond=0)
-    market_close = now.replace(hour=MARKET_CLOSE_HOUR, minute=MARKET_CLOSE_MIN, second=0, microsecond=0)
+    oh, om, ch, cm = _get_market_hours()
+    market_open = now.replace(hour=oh, minute=om, second=0, microsecond=0)
+    market_close = now.replace(hour=ch, minute=cm, second=0, microsecond=0)
     return market_open <= now <= market_close
 
 
@@ -401,7 +429,8 @@ def guarded_cycle():
     """Only run the cycle during market hours."""
     if not is_market_hours():
         now = datetime.now().strftime("%H:%M:%S")
-        logger.info(f"Outside market hours ({now}). Skipping cycle. Active: 08:30-16:15")
+        label = _market_hours_label()
+        logger.info(f"Outside market hours ({now}). Skipping cycle. Active: {label}")
         return
     pre_cycle()
     run_cycle()
@@ -411,14 +440,19 @@ def guarded_cycle():
 
 interval = cfg.get("fetch_interval_minutes", 40)
 
+# Show active market hours
+_hours_label = _market_hours_label()
+_is_extended = _date.today() <= _EXTENDED_EXPIRY
+_mode_note = f" (EXTENDED until {_EXTENDED_EXPIRY})" if _is_extended else ""
+
 # First run – check market hours first
 if is_market_hours():
     logger.info("Running first cycle immediately on startup...")
-    send_telegram("Option Triggers bot started — first scan running now. Future cycles: 08:30-16:15 every 40 min.")
+    send_telegram(f"Option Triggers bot started — first scan running now. Hours: {_hours_label}{_mode_note}, every {interval} min.")
     run_cycle()
 else:
     now_str = datetime.now().strftime("%H:%M:%S")
-    msg = f"Option Triggers bot started at {now_str} (outside market hours 08:30-16:15). Waiting for market open..."
+    msg = f"Option Triggers bot started at {now_str} (outside market hours {_hours_label}{_mode_note}). Waiting..."
     print(msg)
     logger.info(msg)
     send_telegram(msg)
@@ -432,13 +466,13 @@ schedule.every().day.at("16:15").do(lambda: (
     send_telegram("Market closed (04:15 PM). Daily summary generated."),
 ))
 
-# Start-of-day notification at 08:30
+# Start-of-day notification
 schedule.every().day.at("08:30").do(
-    lambda: send_telegram("Market open (08:30 AM). Option Triggers scanning started.")
+    lambda: send_telegram(f"Market open. Option Triggers scanning started. Hours: {_market_hours_label()}")
 )
 
 print()
-print(f"Running every {interval} minutes during market hours (08:30 AM - 04:15 PM).")
+print(f"Running every {interval} minutes during market hours ({_hours_label}{_mode_note}).")
 print(f"Output file: {cfg['output_file']}")
 print(f"Reports: reports/")
 print()

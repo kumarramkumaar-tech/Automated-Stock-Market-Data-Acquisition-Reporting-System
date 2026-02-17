@@ -30,8 +30,12 @@
   },
 
   "market_hours": {
-    "start": "08:30",
-    "end": "16:15"
+    "start": "07:00",
+    "end": "21:00",
+    "normal_start": "08:30",
+    "normal_end": "16:15",
+    "extended_until": "2026-02-20",
+    "note": "Extended to 7AM-9PM until Feb 20, then reverts to 08:30-16:15"
   },
 
   "filter_rules": {
