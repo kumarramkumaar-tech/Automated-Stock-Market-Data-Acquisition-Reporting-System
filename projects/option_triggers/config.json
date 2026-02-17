@@ -20,13 +20,16 @@
   "auto_refresh_page": true,
   "max_retry_attempts": 3,
 
-  "google_sheet": {
-    "sheet_id": "YOUR_GOOGLE_SHEET_ID_HERE",
-    "worksheet_name": "Sheet1",
+  "watchlist": {
+    "local_file": "watchlist/WBRam_Watchlist.xlsx",
     "symbol_column": "A",
     "ltp_check_column": "O",
-    "price_columns": ["P", "Q", "R"],
-    "credentials_file": "credentials/google_service_account.json"
+    "price_columns": ["P", "Q", "R"]
+  },
+
+  "market_hours": {
+    "start": "08:30",
+    "end": "16:15"
   },
 
   "filter_rules": {

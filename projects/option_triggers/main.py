@@ -1,12 +1,14 @@
 # main.py – Option Triggers Module (Priority Project 1)
 #
+# MARKET HOURS: Runs only between 08:30 AM - 04:15 PM IST
+#
 # Automated 40-minute cycle that:
 #   1. Opens Quantsapp Option Triggers page
 #   2. Scrapes all trigger data
 #   3. Applies 4-Rule Filter:
 #      Rule 1: Highest CE OI Changes
 #      Rule 2: Call-Put diff between -1% to +1%
-#      Rule 3: Stock must be in WBRam Google Sheet watchlist
+#      Rule 3: Stock must be in WBRam local Excel watchlist
 #      Rule 4: Column O (LTP) must be TRUE, then check price columns
 #   4. For each qualifying stock, navigates to ALL Quantsapp tools:
 #      - Option Triggers (CE/PE OI, volumes, trigger type)
@@ -305,27 +307,63 @@ def pre_cycle():
         logger.warning(f"Pre-cycle navigation failed: {e}")
 
 
+# ── Market Hours Config ──────────────────────────────────────
+MARKET_OPEN_HOUR = 8
+MARKET_OPEN_MIN = 30     # 08:30 AM
+MARKET_CLOSE_HOUR = 16
+MARKET_CLOSE_MIN = 15    # 04:15 PM
+
+
+def is_market_hours():
+    """Check if current time is within 08:30 AM - 04:15 PM."""
+    now = datetime.now()
+    market_open = now.replace(hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MIN, second=0, microsecond=0)
+    market_close = now.replace(hour=MARKET_CLOSE_HOUR, minute=MARKET_CLOSE_MIN, second=0, microsecond=0)
+    return market_open <= now <= market_close
+
+
+def guarded_cycle():
+    """Only run the cycle during market hours."""
+    if not is_market_hours():
+        now = datetime.now().strftime("%H:%M:%S")
+        logger.info(f"Outside market hours ({now}). Skipping cycle. Active: 08:30-16:15")
+        return
+    pre_cycle()
+    run_cycle()
+
+
 # ── Scheduler ────────────────────────────────────────────────
 
-# First immediate run
-logger.info("Running first cycle immediately...")
-run_cycle()
-
-# Schedule every 40 minutes
 interval = cfg.get("fetch_interval_minutes", 40)
-schedule.every(interval).minutes.do(lambda: (pre_cycle(), run_cycle()))
 
-# Daily summary at 15:30 (after market close)
-schedule.every().day.at("15:30").do(lambda: generate_summary_report(cfg["output_file"]))
+# First immediate run (if within market hours)
+if is_market_hours():
+    logger.info("Within market hours — running first cycle immediately...")
+    send_telegram("Option Triggers bot started (08:30 AM - 04:15 PM)")
+    run_cycle()
+else:
+    now = datetime.now().strftime("%H:%M:%S")
+    wait_msg = f"Current time {now} is outside market hours (08:30-16:15). Waiting..."
+    logger.info(wait_msg)
+    print(wait_msg)
+    send_telegram(f"Option Triggers bot started. {wait_msg}")
 
-# Daily full report at 23:59
-schedule.every().day.at("23:59").do(lambda: (
-    update_summary(cfg["output_file"]),
+# Schedule every 40 minutes (guarded by market hours check)
+schedule.every(interval).minutes.do(guarded_cycle)
+
+# Daily summary at 16:15 (market close)
+schedule.every().day.at("16:15").do(lambda: (
     generate_summary_report(cfg["output_file"]),
+    send_telegram("Market closed (04:15 PM). Daily summary generated."),
 ))
 
+# Start-of-day notification at 08:30
+schedule.every().day.at("08:30").do(
+    lambda: send_telegram("Market open (08:30 AM). Option Triggers scanning started.")
+)
+
 print()
-print(f"Running every {interval} minutes. Press Ctrl+C to stop.")
+print(f"Running every {interval} minutes during market hours (08:30 AM - 04:15 PM).")
 print(f"Output file: {cfg['output_file']}")
 print(f"Reports: reports/")
 print()

@@ -2,21 +2,28 @@
 #
 # Rule 1: Highest CE OI changes from Option Triggers
 # Rule 2: Call-Put diff should be between -1% to +1%
-# Rule 3: Stock must be in the WBRam Google Sheet watchlist
-# Rule 4: Column O (LTP) in Google Sheet must be TRUE, then check price columns
+# Rule 3: Stock must be in the WBRam watchlist (local Excel or Google Sheet)
+# Rule 4: Column O (LTP) in watchlist must be TRUE, then check price columns
 #
 # After filtering: Collect full analysis from ALL Quantsapp tools
 # and generate the announcement.
 
+import os
 import logging
 import pandas as pd
 from datetime import datetime
 
-from helpers.google_sheet import load_watchlist, get_allowed_symbols, check_ltp_status, get_price_columns
 from helpers.quantsapp_tools import collect_all_tool_data
 from helpers.notify import send_telegram
 
 logger = logging.getLogger(__name__)
+
+# Try Google Sheet import; fall back gracefully
+try:
+    from helpers.google_sheet import load_watchlist, get_allowed_symbols, check_ltp_status, get_price_columns
+    GSHEET_AVAILABLE = True
+except ImportError:
+    GSHEET_AVAILABLE = False
 
 
 def apply_rule_1(df, min_ce_oi_change_pct=5.0):
@@ -130,11 +137,11 @@ def apply_rule_2(df, diff_min=-1.0, diff_max=1.0):
 
 def apply_rule_3(df, allowed_symbols):
     """
-    Rule 3: Stock must be in the WBRam Google Sheet watchlist.
+    Rule 3: Stock must be in the WBRam watchlist (local Excel or Google Sheet).
     """
     if df.empty or not allowed_symbols:
         if not allowed_symbols:
-            logger.warning("Rule 3: No symbols loaded from Google Sheet. Skipping filter.")
+            logger.warning("Rule 3: No symbols loaded from watchlist. Skipping filter.")
         return df
 
     # Find the symbol column
@@ -151,20 +158,102 @@ def apply_rule_3(df, allowed_symbols):
     allowed_upper = [s.upper() for s in allowed_symbols]
     filtered = df[df[symbol_col].astype(str).str.strip().str.upper().isin(allowed_upper)].copy()
 
-    logger.info(f"Rule 3: {len(filtered)} stocks match Google Sheet watchlist (from {len(allowed_symbols)} allowed)")
+    logger.info(f"Rule 3: {len(filtered)} stocks match watchlist (from {len(allowed_symbols)} allowed)")
     return filtered
+
+
+def _load_local_watchlist(cfg):
+    """
+    Load watchlist from local Excel file.
+    Config key: watchlist.local_file (path to .xlsx)
+    Falls back to watchlist/WBRam_Watchlist.xlsx
+    """
+    wl_cfg = cfg.get("watchlist", cfg.get("google_sheet", {}))
+    local_file = wl_cfg.get("local_file", "watchlist/WBRam_Watchlist.xlsx")
+
+    if not os.path.exists(local_file):
+        logger.warning(f"Local watchlist not found: {local_file}")
+        return pd.DataFrame()
+
+    try:
+        df = pd.read_excel(local_file)
+        logger.info(f"Loaded {len(df)} rows from local watchlist: {local_file}")
+        return df
+    except Exception as e:
+        logger.error(f"Failed to read local watchlist: {e}")
+        return pd.DataFrame()
+
+
+def _get_allowed_symbols_local(watchlist_df):
+    """Extract stock symbols from the first column of the local watchlist."""
+    if watchlist_df.empty:
+        return []
+    first_col = watchlist_df.columns[0]
+    symbols = watchlist_df[first_col].dropna().astype(str).str.strip().str.upper().tolist()
+    return [s for s in symbols if s and s != ""]
+
+
+def _check_ltp_local(watchlist_df, symbol, ltp_column="O"):
+    """Check Column O (LTP) is TRUE for a symbol in the local watchlist."""
+    if watchlist_df.empty:
+        return False, {}
+
+    first_col = watchlist_df.columns[0]
+    mask = watchlist_df[first_col].astype(str).str.strip().str.upper() == symbol.upper()
+    matching = watchlist_df[mask]
+
+    if matching.empty:
+        return False, {}
+
+    row = matching.iloc[0]
+    col_index = ord(ltp_column.upper()) - ord('A')  # O=14
+    ltp_value = None
+
+    if col_index < len(watchlist_df.columns):
+        col_name = watchlist_df.columns[col_index]
+        ltp_value = row[col_name]
+
+    is_true = False
+    if ltp_value is not None:
+        val_str = str(ltp_value).strip().upper()
+        is_true = val_str in ["TRUE", "YES", "1", "T"]
+
+    return is_true, row.to_dict()
+
+
+def _get_price_cols_local(watchlist_df, symbol, price_columns=None):
+    """Read price columns (P, Q, R) from local watchlist."""
+    if watchlist_df.empty:
+        return {}
+    if price_columns is None:
+        price_columns = ["P", "Q", "R"]
+
+    first_col = watchlist_df.columns[0]
+    mask = watchlist_df[first_col].astype(str).str.strip().str.upper() == symbol.upper()
+    matching = watchlist_df[mask]
+    if matching.empty:
+        return {}
+
+    row = matching.iloc[0]
+    result = {}
+    for col_letter in price_columns:
+        col_index = ord(col_letter.upper()) - ord('A')
+        if col_index < len(watchlist_df.columns):
+            col_name = watchlist_df.columns[col_index]
+            result[col_name] = row[col_name]
+    return result
 
 
 def apply_rule_4(symbols_df, watchlist_df, cfg):
     """
-    Rule 4: Check Column O (LTP) is TRUE in Google Sheet.
+    Rule 4: Check Column O (LTP) is TRUE in watchlist.
     Then check price columns and return qualifying symbols with price data.
 
     Returns list of dicts: [{symbol, ltp_status, price_data, ...}]
     """
-    gs_cfg = cfg.get("google_sheet", {})
-    ltp_column = gs_cfg.get("ltp_check_column", "O")
-    price_columns = gs_cfg.get("price_columns", ["P", "Q", "R"])
+    wl_cfg = cfg.get("watchlist", cfg.get("google_sheet", {}))
+    ltp_column = wl_cfg.get("ltp_check_column", "O")
+    price_columns = wl_cfg.get("price_columns", ["P", "Q", "R"])
 
     if watchlist_df.empty:
         logger.warning("Rule 4: Watchlist empty. Returning all symbols.")
@@ -172,14 +261,18 @@ def apply_rule_4(symbols_df, watchlist_df, cfg):
 
     qualified = []
 
+    # Use local functions or gspread functions depending on availability
     for symbol in symbols_df:
-        ltp_ok, row_data = check_ltp_status(watchlist_df, symbol, ltp_column)
+        if GSHEET_AVAILABLE:
+            ltp_ok, row_data = check_ltp_status(watchlist_df, symbol, ltp_column)
+            price_data = get_price_columns(watchlist_df, symbol, price_columns) if ltp_ok else {}
+        else:
+            ltp_ok, row_data = _check_ltp_local(watchlist_df, symbol, ltp_column)
+            price_data = _get_price_cols_local(watchlist_df, symbol, price_columns) if ltp_ok else {}
 
         if not ltp_ok:
             logger.info(f"Rule 4: {symbol} - Column {ltp_column} is NOT TRUE. Skipped.")
             continue
-
-        price_data = get_price_columns(watchlist_df, symbol, price_columns)
 
         qualified.append({
             "symbol": symbol,
@@ -198,6 +291,10 @@ def run_stock_picker(driver, triggers_df, cfg):
     Master function: Run all 4 rules sequentially, then collect
     full Quantsapp tool analysis for each qualifying stock.
 
+    Watchlist source priority:
+      1. Local Excel (watchlist.local_file in config.json)
+      2. Google Sheet (if gspread is available and configured)
+
     Returns:
       - picks: list of dicts with full analysis per stock
       - announcement: formatted message string
@@ -206,10 +303,17 @@ def run_stock_picker(driver, triggers_df, cfg):
     tool_urls = cfg.get("quantsapp_tools_urls", {})
     wait_seconds = cfg.get("max_table_wait_seconds", 15)
 
-    # --- Load Google Sheet watchlist ---
-    logger.info("Loading WBRam Google Sheet watchlist...")
-    watchlist_df = load_watchlist(cfg)
-    allowed_symbols = get_allowed_symbols(watchlist_df)
+    # --- Load watchlist: Local Excel first, then Google Sheet fallback ---
+    logger.info("Loading WBRam watchlist...")
+    watchlist_df = _load_local_watchlist(cfg)
+
+    if watchlist_df.empty and GSHEET_AVAILABLE:
+        logger.info("Local watchlist empty/missing. Trying Google Sheet...")
+        watchlist_df = load_watchlist(cfg)
+        allowed_symbols = get_allowed_symbols(watchlist_df)
+    else:
+        allowed_symbols = _get_allowed_symbols_local(watchlist_df)
+
     logger.info(f"Loaded {len(allowed_symbols)} symbols from watchlist")
 
     # --- Apply Rule 1: Highest CE OI Changes ---
