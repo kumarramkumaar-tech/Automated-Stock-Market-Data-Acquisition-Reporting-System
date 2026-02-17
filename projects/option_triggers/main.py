@@ -38,6 +38,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import StaleElementReferenceException
 from webdriver_manager.chrome import ChromeDriverManager
 
 from helpers.excel_utils import append_df_to_excel, write_sheet
@@ -148,13 +149,24 @@ def fetch_option_triggers():
         logger.warning(f"Option Triggers table not found: {e}")
         return pd.DataFrame()
 
-    rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+    max_retries = 3
     all_rows = []
-
-    for row in rows:
-        cols = [td.text.strip() for td in row.find_elements(By.TAG_NAME, "td")]
-        if cols:
-            all_rows.append(cols)
+    for attempt in range(max_retries):
+        try:
+            rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+            all_rows = []
+            for row in rows:
+                cols = [td.text.strip() for td in row.find_elements(By.TAG_NAME, "td")]
+                if cols:
+                    all_rows.append(cols)
+            break
+        except StaleElementReferenceException:
+            if attempt < max_retries - 1:
+                logger.warning(f"StaleElementReferenceException on attempt {attempt + 1}, retrying...")
+                time.sleep(2)
+            else:
+                logger.error("StaleElementReferenceException persisted after retries.")
+                return pd.DataFrame()
 
     if not all_rows:
         return pd.DataFrame()
@@ -163,7 +175,7 @@ def fetch_option_triggers():
     try:
         header_els = driver.find_elements(By.CSS_SELECTOR, "table thead th")
         headers = [th.text.strip() for th in header_els]
-    except Exception:
+    except (StaleElementReferenceException, Exception):
         headers = []
 
     # If headers not found, use defaults based on typical Option Triggers layout
