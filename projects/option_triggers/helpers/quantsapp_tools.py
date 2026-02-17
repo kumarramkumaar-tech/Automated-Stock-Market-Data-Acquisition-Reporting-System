@@ -615,6 +615,506 @@ def scrape_max_pain(driver, symbol, url, wait_seconds=15):
 
 
 # ============================================================
+# Column G-N: New detailed module scrapers
+# ============================================================
+
+def _click_tab(driver, tab_text, wait_seconds=5):
+    """Click a tab/button on the current page matching the given text."""
+    tab_selectors = [
+        f"button", f"a", f"[role='tab']", f".nav-link", f".tab",
+        f"[class*='tab']", f"li", f"span",
+    ]
+    for selector in tab_selectors:
+        try:
+            elements = driver.find_elements(By.CSS_SELECTOR, selector)
+            for elem in elements:
+                if tab_text.upper() in elem.text.upper():
+                    elem.click()
+                    time.sleep(wait_seconds)
+                    return True
+        except (StaleElementReferenceException, Exception):
+            continue
+    return False
+
+
+def scrape_writers_trap(driver, symbol, url, wait_seconds=15):
+    """
+    Column G – Open Trap / Writers Trap Indicator.
+    Checks last 3 days: Call Writers Trap = Bullish, Put Writers Trap = Bearish.
+    Also checks Return% to note if move already done (>+/-3%).
+
+    Output example: "Bullish" or "Bearish >2% move already done"
+    """
+    result = {
+        "TRAP_Indicator": "",     # Column G: Bullish / Bearish
+        "TRAP_Type": "",          # Call Writers Trap / Put Writers Trap
+        "TRAP_Return_Pct": "",    # Return % since trap
+        "TRAP_Note": "",          # Column O: Note about move already done
+    }
+
+    try:
+        driver.get(url)
+        time.sleep(3)
+        _search_symbol_on_page(driver, symbol)
+        time.sleep(2)
+
+        rows = _wait_and_get_table(driver, wait_seconds)
+        page_data = _get_page_text_data(driver)
+
+        # Search in table rows for the symbol
+        for row in rows:
+            row_text = " ".join(row).upper()
+            if symbol.upper() in row_text:
+                # Detect trap type from row text
+                if "CALL" in row_text and ("TRAP" in row_text or "WRITER" in row_text):
+                    result["TRAP_Type"] = "Call Writers Trap"
+                    result["TRAP_Indicator"] = "Bullish"
+                elif "PUT" in row_text and ("TRAP" in row_text or "WRITER" in row_text):
+                    result["TRAP_Type"] = "Put Writers Trap"
+                    result["TRAP_Indicator"] = "Bearish"
+
+                # Extract return % from row
+                for cell in row:
+                    cell_clean = cell.replace("%", "").replace(",", "").strip()
+                    try:
+                        val = float(cell_clean)
+                        if -50 < val < 50 and val != 0:
+                            result["TRAP_Return_Pct"] = str(val)
+                            break
+                    except ValueError:
+                        continue
+                break
+
+        # Also check page text for trap signals
+        if not result["TRAP_Indicator"]:
+            for key, val in page_data.items():
+                key_upper = key.upper()
+                val_upper = val.upper()
+                combined = f"{key_upper} {val_upper}"
+                if "CALL" in combined and "TRAP" in combined:
+                    result["TRAP_Type"] = "Call Writers Trap"
+                    result["TRAP_Indicator"] = "Bullish"
+                    break
+                elif "PUT" in combined and "TRAP" in combined:
+                    result["TRAP_Type"] = "Put Writers Trap"
+                    result["TRAP_Indicator"] = "Bearish"
+                    break
+
+        # Generate note if return already >+/-3%
+        try:
+            ret = float(result["TRAP_Return_Pct"])
+            direction = result["TRAP_Indicator"]
+            if direction == "Bullish" and ret > 3:
+                result["TRAP_Note"] = f"Bullish >{ret:.0f}% move already done"
+            elif direction == "Bullish" and ret > 2:
+                result["TRAP_Note"] = f"Bullish >{ret:.0f}% move already done"
+            elif direction == "Bearish" and ret < -3:
+                result["TRAP_Note"] = f"Bearish >{abs(ret):.0f}% move already done"
+            elif direction == "Bearish" and ret < -2:
+                result["TRAP_Note"] = f"Bearish >{abs(ret):.0f}% move already done"
+        except (ValueError, TypeError):
+            pass
+
+    except Exception as e:
+        logger.warning(f"Writers Trap scrape failed for {symbol}: {e}")
+
+    return result
+
+
+def scrape_iv_detailed(driver, symbol, url, wait_seconds=15):
+    """
+    Column H – IVR/IVP with 3-month Hi/Lo range.
+    Navigates to IV Analysis and extracts current IVP plus
+    the 3-month IV high and low for context.
+
+    Output format: "Med IV = CMP IV = 32.07>> Hi-47.85--Lo-16.19"
+    """
+    result = {
+        "IV_Summary": "",         # Column H: Formatted IV summary
+        "IV_Current": "",         # Current IV value
+        "IV_3M_High": "",         # 3-month IV high
+        "IV_3M_Low": "",          # 3-month IV low
+        "IV_Level": "",           # High / Med / Low
+    }
+
+    try:
+        driver.get(url)
+        time.sleep(3)
+        _search_symbol_on_page(driver, symbol)
+        time.sleep(2)
+
+        page_data = _get_page_text_data(driver)
+        rows = _wait_and_get_table(driver, wait_seconds)
+
+        iv_current = ""
+        ivp_current = ""
+        iv_high = ""
+        iv_low = ""
+
+        # Extract IV data from page text
+        for key, val in page_data.items():
+            key_upper = key.upper()
+            if "IVP" in key_upper or "IV PERCENTILE" in key_upper:
+                ivp_current = val.replace("%", "").strip()
+            elif "HIGH" in key_upper and "IV" in key_upper:
+                iv_high = val.replace("%", "").strip()
+            elif "LOW" in key_upper and "IV" in key_upper:
+                iv_low = val.replace("%", "").strip()
+            elif "IV" in key_upper and "RANK" not in key_upper:
+                iv_current = val.replace("%", "").strip()
+
+        # Try to extract from table rows
+        for row in rows:
+            row_text = " ".join(row).upper()
+            if symbol.upper() in row_text:
+                # Look for IV values in the row
+                iv_candidates = []
+                for cell in row:
+                    cell_clean = cell.replace("%", "").replace(",", "").strip()
+                    try:
+                        val = float(cell_clean)
+                        if 0 < val < 200:
+                            iv_candidates.append(val)
+                    except ValueError:
+                        continue
+                if len(iv_candidates) >= 3:
+                    if not iv_current:
+                        iv_current = str(iv_candidates[0])
+                    if not iv_high:
+                        iv_high = str(max(iv_candidates))
+                    if not iv_low:
+                        iv_low = str(min(iv_candidates))
+                elif len(iv_candidates) >= 1 and not iv_current:
+                    iv_current = str(iv_candidates[0])
+                break
+
+        result["IV_Current"] = iv_current
+        result["IV_3M_High"] = iv_high
+        result["IV_3M_Low"] = iv_low
+
+        # Determine IV level
+        try:
+            curr = float(iv_current) if iv_current else 0
+            hi = float(iv_high) if iv_high else curr * 1.5
+            lo = float(iv_low) if iv_low else curr * 0.5
+            mid = (hi + lo) / 2
+
+            if curr >= hi * 0.8:
+                result["IV_Level"] = "High"
+            elif curr <= lo * 1.2:
+                result["IV_Level"] = "Low"
+            else:
+                result["IV_Level"] = "Med"
+
+            # Build formatted summary
+            result["IV_Summary"] = (
+                f"{result['IV_Level']} IV = CMP IV = {iv_current}>> "
+                f"Hi-{iv_high}--Lo-{iv_low}"
+            )
+        except (ValueError, TypeError):
+            if iv_current:
+                result["IV_Summary"] = f"CMP IV = {iv_current}"
+
+    except Exception as e:
+        logger.warning(f"IV Detailed scrape failed for {symbol}: {e}")
+
+    return result
+
+
+def scrape_oi_by_expiry(driver, symbol, url, wait_seconds=15):
+    """
+    Column I – Open Interest by Expiry with R1/R2 strike ranks.
+    Scrapes OI analysis and identifies top 2 CE and PE strikes per expiry.
+
+    Output format:
+      JANCE-R1-200/R2-180
+      JANPE-R1-165/R2-180
+      FEBCE-R1-190/R2-180
+      FEBPE-R1-190/R2-170
+    """
+    result = {
+        "OI_Strikes_Summary": "",    # Column I: Full formatted summary
+        "OI_Near_CE_R1": "",         # Near month CE Rank 1 strike
+        "OI_Near_CE_R2": "",         # Near month CE Rank 2 strike
+        "OI_Near_PE_R1": "",         # Near month PE Rank 1 strike
+        "OI_Near_PE_R2": "",         # Near month PE Rank 2 strike
+        "OI_Next_CE_R1": "",         # Next month CE Rank 1 strike
+        "OI_Next_CE_R2": "",         # Next month CE Rank 2 strike
+        "OI_Next_PE_R1": "",         # Next month PE Rank 1 strike
+        "OI_Next_PE_R2": "",         # Next month PE Rank 2 strike
+    }
+
+    try:
+        driver.get(url)
+        time.sleep(3)
+        _search_symbol_on_page(driver, symbol)
+        time.sleep(2)
+
+        rows = _wait_and_get_table(driver, wait_seconds)
+
+        # Collect CE and PE OI data with strikes
+        ce_strikes = []  # list of (oi_value, strike)
+        pe_strikes = []
+
+        for row in rows:
+            if len(row) >= 5:
+                try:
+                    # Layout: CE OI | CE Chg | Strike | PE Chg | PE OI
+                    strike = row[len(row) // 2].replace(",", "").strip()
+                    ce_oi_str = row[0].replace(",", "").strip()
+                    pe_oi_str = row[-1].replace(",", "").strip()
+
+                    ce_oi = float(ce_oi_str) if ce_oi_str.replace(".", "").isdigit() else 0
+                    pe_oi = float(pe_oi_str) if pe_oi_str.replace(".", "").isdigit() else 0
+
+                    if ce_oi > 0:
+                        ce_strikes.append((ce_oi, strike))
+                    if pe_oi > 0:
+                        pe_strikes.append((pe_oi, strike))
+                except (ValueError, IndexError):
+                    continue
+
+        # Sort by OI descending and get top 2
+        ce_strikes.sort(key=lambda x: x[0], reverse=True)
+        pe_strikes.sort(key=lambda x: x[0], reverse=True)
+
+        # Get current month abbreviation for expiry labels
+        now = datetime.now()
+        near_month = now.strftime("%b").upper()[:3]
+        # Next month
+        next_month_num = now.month + 1 if now.month < 12 else 1
+        next_month_dt = now.replace(month=next_month_num) if now.month < 12 else now.replace(year=now.year + 1, month=1)
+        next_month = next_month_dt.strftime("%b").upper()[:3]
+
+        # Assign R1 and R2
+        if len(ce_strikes) >= 1:
+            result["OI_Near_CE_R1"] = ce_strikes[0][1]
+        if len(ce_strikes) >= 2:
+            result["OI_Near_CE_R2"] = ce_strikes[1][1]
+        if len(pe_strikes) >= 1:
+            result["OI_Near_PE_R1"] = pe_strikes[0][1]
+        if len(pe_strikes) >= 2:
+            result["OI_Near_PE_R2"] = pe_strikes[1][1]
+
+        # Build formatted summary
+        lines = []
+        if result["OI_Near_CE_R1"]:
+            lines.append(f"{near_month}CE-R1-{result['OI_Near_CE_R1']}/R2-{result.get('OI_Near_CE_R2', 'N/A')}")
+        if result["OI_Near_PE_R1"]:
+            lines.append(f"{near_month}PE-R1-{result['OI_Near_PE_R1']}/R2-{result.get('OI_Near_PE_R2', 'N/A')}")
+
+        # Try to get next expiry data by clicking next expiry tab
+        if _click_tab(driver, next_month, wait_seconds=3) or _click_tab(driver, "NEXT", wait_seconds=3):
+            time.sleep(2)
+            rows2 = _wait_and_get_table(driver, wait_seconds=10)
+            ce2 = []
+            pe2 = []
+            for row in rows2:
+                if len(row) >= 5:
+                    try:
+                        strike = row[len(row) // 2].replace(",", "").strip()
+                        ce_oi = float(row[0].replace(",", "")) if row[0].replace(",", "").replace(".", "").isdigit() else 0
+                        pe_oi = float(row[-1].replace(",", "")) if row[-1].replace(",", "").replace(".", "").isdigit() else 0
+                        if ce_oi > 0:
+                            ce2.append((ce_oi, strike))
+                        if pe_oi > 0:
+                            pe2.append((pe_oi, strike))
+                    except (ValueError, IndexError):
+                        continue
+
+            ce2.sort(key=lambda x: x[0], reverse=True)
+            pe2.sort(key=lambda x: x[0], reverse=True)
+
+            if len(ce2) >= 1:
+                result["OI_Next_CE_R1"] = ce2[0][1]
+            if len(ce2) >= 2:
+                result["OI_Next_CE_R2"] = ce2[1][1]
+            if len(pe2) >= 1:
+                result["OI_Next_PE_R1"] = pe2[0][1]
+            if len(pe2) >= 2:
+                result["OI_Next_PE_R2"] = pe2[1][1]
+
+            if result["OI_Next_CE_R1"]:
+                lines.append(f"{next_month}CE-R1-{result['OI_Next_CE_R1']}/R2-{result.get('OI_Next_CE_R2', 'N/A')}")
+            if result["OI_Next_PE_R1"]:
+                lines.append(f"{next_month}PE-R1-{result['OI_Next_PE_R1']}/R2-{result.get('OI_Next_PE_R2', 'N/A')}")
+
+        result["OI_Strikes_Summary"] = "\n".join(lines) if lines else "N/A"
+
+    except Exception as e:
+        logger.warning(f"OI by Expiry scrape failed for {symbol}: {e}")
+
+    return result
+
+
+def _scrape_buildup_tab(driver, symbol, url, tab_name, wait_seconds=15):
+    """
+    Helper: Navigate to Buildup page and click a specific tab,
+    then extract the buildup data for the symbol.
+    Returns a list of buildup types found (e.g. ['Long Buildup', 'Short Covering']).
+    """
+    entries = []
+    try:
+        driver.get(url)
+        time.sleep(3)
+
+        # Click the specific tab
+        _click_tab(driver, tab_name, wait_seconds=3)
+        _search_symbol_on_page(driver, symbol)
+        time.sleep(2)
+
+        rows = _wait_and_get_table(driver, wait_seconds)
+        page_data = _get_page_text_data(driver)
+
+        for row in rows:
+            row_text = " ".join(row).upper()
+            if symbol.upper() in row_text:
+                # Extract buildup type from the last column typically
+                for cell in reversed(row):
+                    cell_upper = cell.upper()
+                    if any(bt in cell_upper for bt in ["LONG BUILDUP", "SHORT BUILDUP", "LONG UNWIND", "SHORT COVER"]):
+                        entries.append(cell.strip())
+                        break
+                if not entries:
+                    entries.append(row[-1].strip() if row else "")
+                break
+
+        # Also check page text
+        if not entries:
+            for key, val in page_data.items():
+                combined = f"{key} {val}".upper()
+                if symbol.upper() in combined:
+                    for bt in ["Long Buildup", "Short Buildup", "Long Unwinding", "Short Covering"]:
+                        if bt.upper() in combined:
+                            entries.append(bt)
+
+    except Exception as e:
+        logger.warning(f"Buildup tab '{tab_name}' scrape failed for {symbol}: {e}")
+
+    return entries
+
+
+def _classify_buildup_short(buildup_types):
+    """Convert buildup types list to short format: L=Long, LU=Long Unwinding, SC=Short Covering, SB=Short Buildup"""
+    short_map = {
+        "LONG BUILDUP": "L",
+        "LONG BUILD": "L",
+        "SHORT BUILDUP": "SB",
+        "SHORT BUILD": "SB",
+        "LONG UNWINDING": "LU",
+        "LONG UNWIND": "LU",
+        "SHORT COVERING": "SC",
+        "SHORT COVER": "SC",
+    }
+    result = []
+    for bt in buildup_types:
+        bt_upper = bt.upper()
+        matched = False
+        for key, short in short_map.items():
+            if key in bt_upper:
+                result.append(short)
+                matched = True
+                break
+        if not matched and bt.strip():
+            result.append(bt.strip()[:3])
+    return "-".join(result) if result else "N/A"
+
+
+def scrape_buildup_fut_oi_h(driver, symbol, url, wait_seconds=15):
+    """
+    Column J – Buildup: Scrip FUTure OI-H (history).
+    Reads OI history and outputs format like: L-LU-SC
+    (Long Buildup, Long Unwinding, Short Covering pattern)
+    """
+    result = {
+        "BU_FUT_OIH": "",         # Column J: Short format like L-LU-SC
+        "BU_FUT_OIH_Detail": "",  # Full detail
+    }
+
+    try:
+        entries = _scrape_buildup_tab(driver, symbol, url, "FUT OI", wait_seconds)
+
+        if not entries:
+            # Try alternate tab names
+            entries = _scrape_buildup_tab(driver, symbol, url, "OI-H", wait_seconds)
+
+        if not entries:
+            entries = _scrape_buildup_tab(driver, symbol, url, "Future", wait_seconds)
+
+        result["BU_FUT_OIH"] = _classify_buildup_short(entries)
+        result["BU_FUT_OIH_Detail"] = " | ".join(entries) if entries else "N/A"
+
+    except Exception as e:
+        logger.warning(f"Buildup FUT OI-H scrape failed for {symbol}: {e}")
+
+    return result
+
+
+def scrape_buildup_scrip_cycle(driver, symbol, url, wait_seconds=15):
+    """
+    Column K – Buildup: Scrip Cycle.
+    Shows the buildup cycle pattern for the stock.
+    Format similar to OI strikes: current cycle position.
+    """
+    result = {
+        "BU_Scrip_Cycle": "",       # Column K: Cycle pattern
+        "BU_Scrip_Cycle_Detail": "",
+    }
+
+    try:
+        entries = _scrape_buildup_tab(driver, symbol, url, "Scrip Cycle", wait_seconds)
+
+        if not entries:
+            entries = _scrape_buildup_tab(driver, symbol, url, "Cycle", wait_seconds)
+
+        result["BU_Scrip_Cycle"] = _classify_buildup_short(entries)
+        result["BU_Scrip_Cycle_Detail"] = " | ".join(entries) if entries else "N/A"
+
+    except Exception as e:
+        logger.warning(f"Buildup Scrip Cycle scrape failed for {symbol}: {e}")
+
+    return result
+
+
+def scrape_buildup_sector(driver, symbol, url, wait_seconds=15):
+    """
+    Columns L, M, N – Buildup: Sector, Sector Cycle, Sector OI-H.
+    Gets sector-level buildup data in 3 separate columns.
+    """
+    result = {
+        "BU_Sector": "",             # Column L: Sector buildup
+        "BU_Sector_Cycle": "",       # Column M: Sector cycle
+        "BU_Sector_OIH": "",         # Column N: Sector OI history
+        "BU_Sector_Detail": "",
+        "BU_Sector_Cycle_Detail": "",
+        "BU_Sector_OIH_Detail": "",
+    }
+
+    try:
+        # Column L: Sector tab
+        entries_sector = _scrape_buildup_tab(driver, symbol, url, "Sector", wait_seconds)
+        result["BU_Sector"] = _classify_buildup_short(entries_sector)
+        result["BU_Sector_Detail"] = " | ".join(entries_sector) if entries_sector else "N/A"
+
+        # Column M: Sector Cycle tab
+        entries_cycle = _scrape_buildup_tab(driver, symbol, url, "Sector Cycle", wait_seconds)
+        result["BU_Sector_Cycle"] = _classify_buildup_short(entries_cycle)
+        result["BU_Sector_Cycle_Detail"] = " | ".join(entries_cycle) if entries_cycle else "N/A"
+
+        # Column N: Sector OI-H tab
+        entries_oih = _scrape_buildup_tab(driver, symbol, url, "Sector OI", wait_seconds)
+        if not entries_oih:
+            entries_oih = _scrape_buildup_tab(driver, symbol, url, "OI-H", wait_seconds)
+        result["BU_Sector_OIH"] = _classify_buildup_short(entries_oih)
+        result["BU_Sector_OIH_Detail"] = " | ".join(entries_oih) if entries_oih else "N/A"
+
+    except Exception as e:
+        logger.warning(f"Buildup Sector scrape failed for {symbol}: {e}")
+
+    return result
+
+
+# ============================================================
 # Master function: Collect ALL tool data for a single stock
 # ============================================================
 
@@ -683,7 +1183,43 @@ def collect_all_tool_data(driver, symbol, tool_urls, wait_seconds=15):
         mp_data = scrape_max_pain(driver, symbol, tool_urls["max_pain"], wait_seconds)
         all_data.update(mp_data)
 
-    # Generate overall verdict
+    # ── Column G: Writers Trap Indicator ──
+    if "writers_trap" in tool_urls:
+        logger.info(f"  -> Scraping Writers Trap for {symbol} (Col G)")
+        trap_data = scrape_writers_trap(driver, symbol, tool_urls["writers_trap"], wait_seconds)
+        all_data.update(trap_data)
+
+    # ── Column H: IV Detailed with 3-month Hi/Lo ──
+    if "iv_analysis" in tool_urls:
+        logger.info(f"  -> Scraping IV Detailed for {symbol} (Col H)")
+        iv_detail = scrape_iv_detailed(driver, symbol, tool_urls["iv_analysis"], wait_seconds)
+        all_data.update(iv_detail)
+
+    # ── Column I: OI Strikes by Expiry (R1/R2 ranks) ──
+    if "oi_analysis" in tool_urls:
+        logger.info(f"  -> Scraping OI Strikes by Expiry for {symbol} (Col I)")
+        oi_strikes = scrape_oi_by_expiry(driver, symbol, tool_urls["oi_analysis"], wait_seconds)
+        all_data.update(oi_strikes)
+
+    # ── Column J: Buildup Scrip FUT OI-H ──
+    if "buildup" in tool_urls:
+        logger.info(f"  -> Scraping Buildup FUT OI-H for {symbol} (Col J)")
+        bu_fut = scrape_buildup_fut_oi_h(driver, symbol, tool_urls["buildup"], wait_seconds)
+        all_data.update(bu_fut)
+
+    # ── Column K: Buildup Scrip Cycle ──
+    if "buildup" in tool_urls:
+        logger.info(f"  -> Scraping Buildup Scrip Cycle for {symbol} (Col K)")
+        bu_cycle = scrape_buildup_scrip_cycle(driver, symbol, tool_urls["buildup"], wait_seconds)
+        all_data.update(bu_cycle)
+
+    # ── Columns L, M, N: Buildup Sector, Sector Cycle, Sector OI-H ──
+    if "buildup" in tool_urls:
+        logger.info(f"  -> Scraping Buildup Sector data for {symbol} (Cols L-N)")
+        bu_sector = scrape_buildup_sector(driver, symbol, tool_urls["buildup"], wait_seconds)
+        all_data.update(bu_sector)
+
+    # Generate overall verdict (include new signals)
     all_data["Overall_Verdict"] = _generate_verdict(all_data)
 
     logger.info(f"Completed all tool data for {symbol}")
@@ -699,7 +1235,7 @@ def _generate_verdict(data):
     bearish_count = 0
     total_signals = 0
 
-    signal_keys = ["IV_Signal", "OI_Trend", "PCR_Signal", "BU_Signal", "FUT_Signal", "MP_Signal"]
+    signal_keys = ["TRAP_Indicator", "IV_Signal", "OI_Trend", "PCR_Signal", "BU_Signal", "FUT_Signal", "MP_Signal"]
 
     for key in signal_keys:
         val = data.get(key, "").upper()

@@ -10,7 +10,8 @@
     "buildup": "https://web.quantsapp.com/buildup",
     "futures_oi": "https://web.quantsapp.com/futures-oi",
     "max_pain": "https://web.quantsapp.com/max-pain",
-    "multi_strike_oi": "https://web.quantsapp.com/multi-strike-oi"
+    "multi_strike_oi": "https://web.quantsapp.com/multi-strike-oi",
+    "writers_trap": "https://web.quantsapp.com/open-trap"
   },
   "fetch_interval_minutes": 40,
   "output_file": "output/Option_Triggers_Analysis.xlsx",

@@ -35,9 +35,20 @@ PICK_COLUMNS = [
     "OT_Trigger_Type", "OT_LTP", "OT_Change_Pct",
     "OT_Call_Put_Diff_Pct",
 
-    # IV Analysis Tool
+    # Column G: Writers Trap Indicator
+    "TRAP_Indicator", "TRAP_Type", "TRAP_Return_Pct", "TRAP_Note",
+
+    # Column H: IV Detailed with 3-month Hi/Lo
+    "IV_Summary", "IV_Current", "IV_3M_High", "IV_3M_Low", "IV_Level",
+
+    # IV Analysis Tool (basic)
     "IV", "IVP", "IV_Rank", "IVP_Status",
     "HV", "IV_vs_HV", "IV_Signal",
+
+    # Column I: OI Strikes by Expiry (R1/R2 ranks)
+    "OI_Strikes_Summary",
+    "OI_Near_CE_R1", "OI_Near_CE_R2", "OI_Near_PE_R1", "OI_Near_PE_R2",
+    "OI_Next_CE_R1", "OI_Next_CE_R2", "OI_Next_PE_R1", "OI_Next_PE_R2",
 
     # OI Analysis Tool
     "OI_Total_CE_OI", "OI_Total_PE_OI",
@@ -48,8 +59,19 @@ PICK_COLUMNS = [
     # PCR Analysis Tool
     "PCR_OI", "PCR_Volume", "PCR_Trend", "PCR_Signal",
 
-    # Buildup Tool
+    # Column J: Buildup Scrip FUT OI-H
+    "BU_FUT_OIH", "BU_FUT_OIH_Detail",
+
+    # Column K: Buildup Scrip Cycle
+    "BU_Scrip_Cycle", "BU_Scrip_Cycle_Detail",
+
+    # Buildup Tool (basic)
     "BU_Type", "BU_Price_Change_Pct", "BU_OI_Change_Pct", "BU_Signal",
+
+    # Columns L, M, N: Buildup Sector
+    "BU_Sector", "BU_Sector_Detail",            # Column L
+    "BU_Sector_Cycle", "BU_Sector_Cycle_Detail", # Column M
+    "BU_Sector_OIH", "BU_Sector_OIH_Detail",    # Column N
 
     # Futures OI Tool
     "FUT_OI", "FUT_OI_Change", "FUT_OI_Change_Pct",
@@ -68,20 +90,27 @@ PICK_COLUMNS = [
 
 # Color schemes for different tool sections
 SECTION_COLORS = {
-    "OT_": "D4E6F1",   # Light blue – Option Triggers
-    "IV":  "D5F5E3",   # Light green – IV Analysis
-    "HV":  "D5F5E3",   # Light green – IV Analysis
-    "OI_": "FCF3CF",   # Light yellow – OI Analysis
-    "PCR_": "FADBD8",  # Light pink – PCR
-    "BU_": "E8DAEF",   # Light purple – Buildup
-    "FUT_": "F6DDCC",  # Light orange – Futures
-    "MP_": "D6EAF8",   # Light cyan – Max Pain
-    "GS_": "FDEBD0",   # Light peach – Google Sheet
+    "OT_": "D4E6F1",     # Light blue – Option Triggers
+    "TRAP_": "F5B7B1",   # Light red – Writers Trap (Col G)
+    "IV_": "D5F5E3",     # Light green – IV Analysis (Col H)
+    "IV":  "D5F5E3",     # Light green – IV Analysis
+    "HV":  "D5F5E3",     # Light green – IV Analysis
+    "OI_": "FCF3CF",     # Light yellow – OI Analysis (Col I)
+    "PCR_": "FADBD8",    # Light pink – PCR
+    "BU_FUT": "D2B4DE",  # Purple – Buildup FUT OI-H (Col J)
+    "BU_Scrip": "D7BDE2",# Light purple – Buildup Scrip Cycle (Col K)
+    "BU_Sector": "EBDEF0",# Very light purple – Sector (Cols L-N)
+    "BU_": "E8DAEF",     # Light purple – Buildup (basic)
+    "FUT_": "F6DDCC",    # Light orange – Futures
+    "MP_": "D6EAF8",     # Light cyan – Max Pain
+    "GS_": "FDEBD0",     # Light peach – Google Sheet
 }
 
 # Signal columns to color-code (green=bullish, red=bearish)
 SIGNAL_COLUMNS = [
-    "IV_Signal", "OI_Trend", "PCR_Signal", "BU_Signal",
+    "TRAP_Indicator", "IV_Signal", "OI_Trend", "PCR_Signal",
+    "BU_Signal", "BU_FUT_OIH", "BU_Scrip_Cycle",
+    "BU_Sector", "BU_Sector_Cycle", "BU_Sector_OIH",
     "FUT_Signal", "MP_Signal", "Overall_Verdict",
 ]
 

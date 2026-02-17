@@ -308,6 +308,16 @@ def run_cycle():
             bu_type = pick.get("BU_Type", "N/A")
             verdict = pick.get("Overall_Verdict", "N/A")
 
+            trap_info = pick.get('TRAP_Indicator', '')
+            trap_note = pick.get('TRAP_Note', '')
+            iv_summary = pick.get('IV_Summary', '')
+            oi_strikes = pick.get('OI_Strikes_Summary', '')
+            bu_fut_oih = pick.get('BU_FUT_OIH', '')
+            bu_scrip_cycle = pick.get('BU_Scrip_Cycle', '')
+            bu_sector = pick.get('BU_Sector', '')
+            bu_sector_cycle = pick.get('BU_Sector_Cycle', '')
+            bu_sector_oih = pick.get('BU_Sector_OIH', '')
+
             msg = (
                 f"*Stock Pick from WBRam Excel is \"{symbol}\"*\n"
                 f"{'─' * 30}\n"
@@ -316,9 +326,17 @@ def run_cycle():
                 f"  PE OI Change: {pick.get('OT_PE_OI_Change_Pct', 'N/A')}%\n"
                 f"  Call-Put Diff: {pick.get('OT_Call_Put_Diff_Pct', 'N/A')}%\n"
                 f"  LTP: {pick.get('OT_LTP', 'N/A')}\n\n"
+                f"*[G] Writers Trap:* {trap_info or 'N/A'}"
+                f"{' - ' + trap_note if trap_note else ''}\n"
+                f"*[H] IV Summary:* {iv_summary or 'N/A'}\n"
+                f"*[I] OI Strikes:*\n  {oi_strikes or 'N/A'}\n\n"
+                f"*[J] FUT OI-H:* {bu_fut_oih or 'N/A'}\n"
+                f"*[K] Scrip Cycle:* {bu_scrip_cycle or 'N/A'}\n"
+                f"*[L] Sector:* {bu_sector or 'N/A'}\n"
+                f"*[M] Sector Cycle:* {bu_sector_cycle or 'N/A'}\n"
+                f"*[N] Sector OI-H:* {bu_sector_oih or 'N/A'}\n\n"
                 f"*IV Analysis:*\n"
                 f"  IVP: {pick.get('IVP', 'N/A')} ({ivp_status})\n"
-                f"  IV: {pick.get('IV', 'N/A')} | HV: {pick.get('HV', 'N/A')}\n"
                 f"  IV Signal: {pick.get('IV_Signal', 'N/A')}\n\n"
                 f"*OI Analysis:*\n"
                 f"  Resistance: {pick.get('OI_Max_CE_Strike', 'N/A')}\n"
