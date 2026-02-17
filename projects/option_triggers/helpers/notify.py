@@ -2,7 +2,12 @@ import os
 import requests
 from dotenv import load_dotenv
 
+# Try loading .env from CWD first, then from the project directory
 load_dotenv()
+if not os.getenv("TELEGRAM_TOKEN"):
+    # Resolve .env relative to this file's project directory
+    _project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    load_dotenv(os.path.join(_project_dir, ".env"))
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")

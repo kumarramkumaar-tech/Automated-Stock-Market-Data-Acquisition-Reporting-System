@@ -36,8 +36,12 @@ def apply_rule_1(df, min_ce_oi_change_pct=5.0):
     if df.empty:
         return df
 
-    # Try to find CE OI change column
+    logger.info(f"Rule 1: Available columns: {list(df.columns)}")
+
+    # Try to find CE OI change column with multiple matching strategies
     ce_change_col = None
+
+    # Strategy 1: Exact pattern match
     for col in df.columns:
         col_upper = col.upper()
         if "CE" in col_upper and "OI" in col_upper and ("CHANGE" in col_upper or "CHG" in col_upper) and "%" in col_upper:
@@ -46,16 +50,51 @@ def apply_rule_1(df, min_ce_oi_change_pct=5.0):
         elif "CE" in col_upper and "OI" in col_upper and ("CHANGE" in col_upper or "CHG" in col_upper):
             ce_change_col = col
 
+    # Strategy 2: Known column names (exact or partial match)
     if ce_change_col is None:
-        # Fallback: use "Change %" if available (from unusual activity data)
+        known_names = ["Change %", "OT_CE_OI_Change_Pct", "CE OI Change %",
+                       "CE OI Chg %", "CE Chg %", "CE Change %", "CE_OI_Change",
+                       "OI Change %"]
         for col in df.columns:
-            if col in ["Change %", "OT_CE_OI_Change_Pct"]:
+            if col in known_names:
                 ce_change_col = col
                 break
+
+    # Strategy 3: Quantsapp actual headers - detect garbled names like "Olchg(%)", "OIchg(%)"
+    if ce_change_col is None:
+        for col in df.columns:
+            col_clean = col.upper().replace(" ", "")
+            if "OICHG" in col_clean or "OLCHG" in col_clean or "OI_CHG" in col_clean:
+                ce_change_col = col
+                break
+
+    # Strategy 4: Any column with "change"/"chg" and "%" in the name
+    if ce_change_col is None:
+        for col in df.columns:
+            col_upper = col.upper()
+            if ("CHANGE" in col_upper or "CHG" in col_upper) and "%" in col_upper:
+                ce_change_col = col
+                break
+
+    # Strategy 5: Any column with "oi" in the name
+    if ce_change_col is None:
+        for col in df.columns:
+            col_upper = col.upper()
+            if "OI" in col_upper:
+                ce_change_col = col
+                break
+
+    # Strategy 6: Column index 3 (OI Change % in typical Quantsapp layout)
+    if ce_change_col is None and len(df.columns) >= 4:
+        candidate = df.columns[3]
+        logger.info(f"Rule 1: Trying column index 3 as OI Change: '{candidate}'")
+        ce_change_col = candidate
 
     if ce_change_col is None:
         logger.warning("Rule 1: Could not find CE OI Change column. Skipping filter.")
         return df
+
+    logger.info(f"Rule 1: Using column '{ce_change_col}' for CE OI Change %")
 
     df = df.copy()
     df["_ce_oi_change_num"] = pd.to_numeric(
@@ -120,7 +159,7 @@ def apply_rule_2(df, diff_min=-1.0, diff_max=1.0):
             diff_col = "_call_put_diff"
 
     if diff_col is None:
-        logger.warning("Rule 2: Could not find or compute Call-Put diff. Skipping filter.")
+        logger.warning("Rule 2: Could not find or compute Call-Put diff. Passing all stocks (diff computed later from tool data).")
         return df
 
     df = df.copy()
@@ -356,17 +395,26 @@ def run_stock_picker(driver, triggers_df, cfg):
         return [], "No stocks qualified after Rules 1-3 this cycle."
 
     # Get unique symbols that passed Rules 1-3
-    symbol_col = None
-    for col in r3.columns:
-        if col.upper() in ["SYMBOL", "STOCK", "NAME"]:
-            symbol_col = col
-            break
-    if symbol_col is None:
-        symbol_col = r3.columns[0]
-
-    passing_symbols = [
-        _clean_symbol(s) for s in r3[symbol_col].astype(str).str.strip().str.upper().unique().tolist()
-    ]
+    # Use _clean_symbol column if available (added by Rule 3), otherwise find symbol column
+    if "_clean_symbol" in r3.columns:
+        passing_symbols = r3["_clean_symbol"].dropna().unique().tolist()
+    else:
+        symbol_col = None
+        for col in r3.columns:
+            if col.upper() in ["SYMBOL", "STOCK", "NAME"]:
+                symbol_col = col
+                break
+        if symbol_col is None:
+            symbol_col = r3.columns[0]
+        # Use iloc to ensure we get a Series (not DataFrame) even with duplicate column names
+        col_idx = r3.columns.get_loc(symbol_col)
+        if isinstance(col_idx, int):
+            sym_series = r3.iloc[:, col_idx]
+        else:
+            sym_series = r3.iloc[:, col_idx[0]] if hasattr(col_idx, '__iter__') else r3.iloc[:, 0]
+        passing_symbols = [
+            _clean_symbol(s) for s in sym_series.astype(str).str.strip().str.upper().unique().tolist()
+        ]
 
     # --- Apply Rule 4: LTP Column O = TRUE + price check ---
     logger.info("Applying Rule 4: LTP Column O check...")

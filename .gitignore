@@ -11,6 +11,7 @@ output/
 reports/
 __pycache__/
 *.xlsx
+!projects/option_triggers/watchlist/*.xlsx
 *.pdf
 
 # System files

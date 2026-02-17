@@ -171,29 +171,45 @@ def fetch_option_triggers():
     if not all_rows:
         return pd.DataFrame()
 
-    # Determine columns from header row
+    # Determine actual data width from rows
+    actual_col_count = max(len(r) for r in all_rows)
+    logger.info(f"Scraped rows have {actual_col_count} columns each")
+
+    # Try to get headers from page
     try:
         header_els = driver.find_elements(By.CSS_SELECTOR, "table thead th")
-        headers = [th.text.strip() for th in header_els]
+        page_headers = [th.text.strip() for th in header_els]
     except (StaleElementReferenceException, Exception):
+        page_headers = []
+
+    # IMPORTANT: Trim headers to match actual data width, not the other way around.
+    # Quantsapp often has more <th> headers than <td> data cells per row.
+    if page_headers and len(page_headers) >= actual_col_count:
+        headers = page_headers[:actual_col_count]
+    elif page_headers:
+        headers = page_headers
+        # Pad if rows have more data than headers
+        headers.extend([f"Col_{i}" for i in range(len(headers), actual_col_count)])
+    else:
+        # No page headers found - use fallback based on actual column count
         headers = []
 
-    # If headers not found, use defaults based on typical Option Triggers layout
-    if not headers or len(headers) < len(all_rows[0]):
-        max_cols = max(len(r) for r in all_rows)
-        headers = [
-            "Symbol", "Expiry", "Strike", "Type",
-            "CE OI", "CE OI Change", "CE OI Change %",
-            "PE OI", "PE OI Change", "PE OI Change %",
-            "CE Volume", "PE Volume",
-            "LTP", "Change %", "Trigger Type"
+    # If no usable headers, use defaults trimmed to actual data width
+    if not headers:
+        fallback = [
+            "Symbol", "Price", "Price Change %", "OI Change %",
+            "Trigger Type", "Volume", "CE OI Change %",
+            "LTP", "LTP Change", "Strike",
+            "PE LTP Change", "PE OI Change %", "PE Volume"
         ]
-        # Pad or trim to match actual column count
-        if len(headers) < max_cols:
-            headers.extend([f"Col_{i}" for i in range(len(headers), max_cols)])
-        headers = headers[:max_cols]
+        if actual_col_count <= len(fallback):
+            headers = fallback[:actual_col_count]
+        else:
+            headers = fallback + [f"Col_{i}" for i in range(len(fallback), actual_col_count)]
 
-    # Normalize row lengths
+    logger.info(f"Using {len(headers)} headers: {headers}")
+
+    # Normalize row lengths to match header count
     normalized = []
     for row in all_rows:
         if len(row) < len(headers):
