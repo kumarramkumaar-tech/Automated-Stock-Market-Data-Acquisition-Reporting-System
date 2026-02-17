@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Option Triggers Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f1923;
+            --bg-card: #1a2733;
+            --bg-card-hover: #1f3040;
+            --border-color: #2a3f52;
+            --text-primary: #e8edf2;
+            --text-secondary: #8899a6;
+            --accent-blue: #1d9bf0;
+            --accent-green: #00c853;
+            --accent-red: #ff1744;
+            --accent-orange: #ff9100;
+            --accent-purple: #b388ff;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .dash-header {
+            background: linear-gradient(135deg, #0d2137 0%, #1a3a5c 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .dash-header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .dash-header h1 i { color: var(--accent-blue); }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 0.85rem;
+        }
+        .market-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .market-open { background: rgba(0,200,83,0.15); color: var(--accent-green); border: 1px solid rgba(0,200,83,0.3); }
+        .market-closed { background: rgba(255,23,68,0.15); color: var(--accent-red); border: 1px solid rgba(255,23,68,0.3); }
+
+        /* Tabs */
+        .nav-tabs-custom {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 24px;
+            display: flex;
+            gap: 0;
+            overflow-x: auto;
+        }
+        .nav-tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .nav-tab:hover { color: var(--text-primary); background: var(--bg-card-hover); }
+        .nav-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+
+        /* Main content */
+        .main-content { padding: 20px 24px; }
+
+        /* Cards */
+        .card-dark {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        .card-dark:hover { border-color: rgba(29,155,240,0.3); }
+        .card-title {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 8px;
+        }
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .card-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Signal colors */
+        .text-bullish { color: var(--accent-green) !important; }
+        .text-bearish { color: var(--accent-red) !important; }
+        .text-mixed { color: var(--accent-orange) !important; }
+        .text-neutral { color: var(--text-secondary) !important; }
+        .bg-bullish { background: rgba(0,200,83,0.12) !important; }
+        .bg-bearish { background: rgba(255,23,68,0.12) !important; }
+
+        /* Signal bars */
+        .signal-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: var(--border-color);
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .signal-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s;
+        }
+
+        /* Gauge */
+        .gauge-container {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 0;
+        }
+        .gauge-ring {
+            width: 80px;
+            height: 80px;
+            position: relative;
+        }
+        .gauge-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .gauge-ring circle {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+        }
+        .gauge-ring .bg { stroke: var(--border-color); }
+        .gauge-ring .fill { transition: stroke-dashoffset 0.8s; }
+        .gauge-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        /* Data table */
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.82rem;
+        }
+        .data-table thead th {
+            background: #0d1b27;
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 10px 12px;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+        .data-table tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(42,63,82,0.5);
+            white-space: nowrap;
+        }
+        .data-table tbody tr:hover { background: var(--bg-card-hover); }
+        .table-scroll {
+            overflow-x: auto;
+            max-height: 500px;
+            overflow-y: auto;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Badge pill */
+        .badge-signal {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+        .badge-bullish { background: rgba(0,200,83,0.15); color: var(--accent-green); }
+        .badge-bearish { background: rgba(255,23,68,0.15); color: var(--accent-red); }
+        .badge-mixed { background: rgba(255,145,0,0.15); color: var(--accent-orange); }
+
+        /* IVP bar */
+        .ivp-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--border-color);
+            border-radius: 3px;
+            position: relative;
+            margin-top: 4px;
+        }
+        .ivp-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s;
+        }
+        .ivp-low { background: var(--accent-green); }
+        .ivp-med { background: var(--accent-orange); }
+        .ivp-high { background: var(--accent-red); }
+
+        /* Download button */
+        .btn-download {
+            background: linear-gradient(135deg, #1d9bf0, #1a73c7);
+            border: none;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+        }
+        .btn-download:hover { opacity: 0.85; color: white; }
+
+        /* Refresh indicator */
+        .refresh-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+        }
+        .refresh-dot.live { background: var(--accent-green); animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Pick card */
+        .pick-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 12px;
+            transition: border-color 0.2s;
+        }
+        .pick-card:hover { border-color: var(--accent-blue); }
+        .pick-symbol {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+        .pick-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-top: 12px;
+        }
+        .pick-meta-item {
+            flex: 1;
+            min-width: 140px;
+        }
+        .pick-meta-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pick-meta-value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        /* Section hidden by default */
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-content { padding: 12px; }
+            .card-value { font-size: 1.5rem; }
+            .dash-header { padding: 10px 12px; }
+        }
+
+        /* No data state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+        .empty-state i { font-size: 3rem; margin-bottom: 12px; opacity: 0.4; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="dash-header">
+    <h1>
+        <i class="bi bi-graph-up-arrow"></i>
+        Option Triggers Dashboard
+    </h1>
+    <div class="header-right">
+        <span><span class="refresh-dot live"></span> <span id="lastUpdate">--</span></span>
+        <span id="marketBadge" class="market-badge market-closed">LOADING</span>
+        <a class="btn-download" href="/api/download">
+            <i class="bi bi-download"></i> Excel
+        </a>
+    </div>
+</div>
+
+<!-- Navigation Tabs -->
+<div class="nav-tabs-custom">
+    <div class="nav-tab active" data-tab="overview">Overview</div>
+    <div class="nav-tab" data-tab="picks">Stock Picks</div>
+    <div class="nav-tab" data-tab="signals">Signal Analysis</div>
+    <div class="nav-tab" data-tab="triggers">Raw Triggers</div>
+    <div class="nav-tab" data-tab="history">History</div>
+    <div class="nav-tab" data-tab="watchlist">Watchlist</div>
+</div>
+
+<!-- Main Content -->
+<div class="main-content">
+
+    <!-- ═══ OVERVIEW TAB ═══ -->
+    <div id="tab-overview" class="tab-panel active">
+        <!-- KPI Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="card-dark">
+                    <div class="card-title">Total Picks</div>
+                    <div class="card-value" id="kpiTotalPicks">--</div>
+                    <div class="card-subtitle" id="kpiPickTime">Last cycle</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card-dark">
+                    <div class="card-value text-bullish" id="kpiBullish">--</div>
+                    <div class="card-title">Bullish Signals</div>
+                    <div class="signal-bar"><div class="signal-bar-fill" id="barBullish" style="width:0%;background:var(--accent-green)"></div></div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card-dark">
+                    <div class="card-value text-bearish" id="kpiBearish">--</div>
+                    <div class="card-title">Bearish Signals</div>
+                    <div class="signal-bar"><div class="signal-bar-fill" id="barBearish" style="width:0%;background:var(--accent-red)"></div></div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card-dark">
+                    <div class="card-title">Market Status</div>
+                    <div class="card-value" id="kpiMarketTime" style="font-size:1.3rem">--</div>
+                    <div class="card-subtitle" id="kpiMarketMode">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Pick Cards -->
+        <h5 style="margin-bottom:12px;font-weight:600;">Current Stock Picks</h5>
+        <div id="overviewPicks">
+            <div class="empty-state">
+                <i class="bi bi-hourglass-split d-block"></i>
+                <p>Waiting for data... Run the Option Triggers script to see picks here.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ STOCK PICKS TAB ═══ -->
+    <div id="tab-picks" class="tab-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 style="font-weight:600;margin:0;">Detailed Stock Picks (All Columns)</h5>
+            <a class="btn-download btn-sm" href="/api/download"><i class="bi bi-download"></i> Download Excel</a>
+        </div>
+        <div class="table-scroll" id="picksTableContainer">
+            <div class="empty-state"><p>No picks data yet.</p></div>
+        </div>
+    </div>
+
+    <!-- ═══ SIGNAL ANALYSIS TAB ═══ -->
+    <div id="tab-signals" class="tab-panel">
+        <h5 style="font-weight:600;margin-bottom:16px;">Signal Breakdown by Tool</h5>
+        <div class="row g-3" id="signalCards">
+            <div class="empty-state col-12"><p>No signal data available yet.</p></div>
+        </div>
+    </div>
+
+    <!-- ═══ RAW TRIGGERS TAB ═══ -->
+    <div id="tab-triggers" class="tab-panel">
+        <h5 style="font-weight:600;margin-bottom:12px;">Raw Option Triggers (Last 50 rows)</h5>
+        <div class="table-scroll" id="triggersTableContainer">
+            <div class="empty-state"><p>No triggers data yet.</p></div>
+        </div>
+    </div>
+
+    <!-- ═══ HISTORY TAB ═══ -->
+    <div id="tab-history" class="tab-panel">
+        <h5 style="font-weight:600;margin-bottom:12px;">Pick History</h5>
+        <div id="dailySummary" class="mb-4"></div>
+        <div class="table-scroll" id="historyTableContainer">
+            <div class="empty-state"><p>No history data yet.</p></div>
+        </div>
+    </div>
+
+    <!-- ═══ WATCHLIST TAB ═══ -->
+    <div id="tab-watchlist" class="tab-panel">
+        <h5 style="font-weight:600;margin-bottom:12px;">WBRam Watchlist</h5>
+        <div class="card-dark" id="watchlistInfo">
+            <div class="empty-state"><p>Loading watchlist...</p></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ═══ State ═══
+let autoRefreshInterval = null;
+const REFRESH_MS = 60000; // 60 seconds
+
+// ═══ Tab Navigation ═══
+document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    });
+});
+
+// ═══ Fetch Helpers ═══
+async function fetchJSON(url) {
+    try {
+        const res = await fetch(url);
+        return await res.json();
+    } catch (e) {
+        console.error('Fetch error:', url, e);
+        return null;
+    }
+}
+
+// ═══ Signal Classification ═══
+function signalClass(text) {
+    if (!text) return 'text-neutral';
+    const t = text.toUpperCase();
+    if (t.includes('BULLISH') || t.includes('BUY') || t.includes('CHEAP') || t.includes('FAVORABLE')) return 'text-bullish';
+    if (t.includes('BEARISH') || t.includes('SELL') || t.includes('EXPENSIVE')) return 'text-bearish';
+    if (t.includes('MIXED') || t.includes('NEUTRAL')) return 'text-mixed';
+    return 'text-neutral';
+}
+
+function signalBadge(text) {
+    if (!text) return '<span class="badge-signal badge-mixed">N/A</span>';
+    const t = text.toUpperCase();
+    if (t.includes('BULLISH') || t.includes('BUY') || t.includes('CHEAP')) return `<span class="badge-signal badge-bullish">${text}</span>`;
+    if (t.includes('BEARISH') || t.includes('SELL') || t.includes('EXPENSIVE')) return `<span class="badge-signal badge-bearish">${text}</span>`;
+    return `<span class="badge-signal badge-mixed">${text}</span>`;
+}
+
+function ivpColor(ivp) {
+    const v = parseFloat(ivp);
+    if (isNaN(v)) return 'ivp-med';
+    if (v <= 30) return 'ivp-low';
+    if (v <= 60) return 'ivp-med';
+    return 'ivp-high';
+}
+
+function pctColor(val) {
+    const v = parseFloat(String(val).replace('%', '').replace(',', ''));
+    if (isNaN(v)) return '';
+    return v >= 0 ? 'text-bullish' : 'text-bearish';
+}
+
+function esc(val) {
+    if (val === null || val === undefined || val === '') return '--';
+    return String(val).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ═══ Render: Overview ═══
+function renderOverview(data) {
+    const { picks, summary } = data;
+
+    document.getElementById('kpiTotalPicks').textContent = summary.total || 0;
+    document.getElementById('kpiBullish').textContent = summary.bullish || 0;
+    document.getElementById('kpiBearish').textContent = summary.bearish || 0;
+
+    const total = summary.total || 1;
+    document.getElementById('barBullish').style.width = ((summary.bullish / total) * 100) + '%';
+    document.getElementById('barBearish').style.width = ((summary.bearish / total) * 100) + '%';
+
+    if (!picks || picks.length === 0) {
+        document.getElementById('overviewPicks').innerHTML = `
+            <div class="empty-state">
+                <i class="bi bi-hourglass-split d-block"></i>
+                <p>No stock picks in current cycle. Waiting for next scan...</p>
+            </div>`;
+        return;
+    }
+
+    let html = '';
+    for (const p of picks) {
+        const verdictClass = signalClass(p.Overall_Verdict);
+        html += `
+        <div class="pick-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <span class="pick-symbol">${esc(p.Symbol)}</span>
+                    <span class="ms-2" style="font-size:0.8rem;color:var(--text-secondary)">${esc(p.Analysis_Time)}</span>
+                </div>
+                <div>${signalBadge(p.Overall_Verdict)}</div>
+            </div>
+            <div class="pick-meta">
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">Writers Trap (G)</div>
+                    <div class="pick-meta-value ${signalClass(p.TRAP_Indicator)}">${esc(p.TRAP_Indicator) || '--'}${p.TRAP_Note ? ' <small style="opacity:0.7">'+esc(p.TRAP_Note)+'</small>' : ''}</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">IV Summary (H)</div>
+                    <div class="pick-meta-value">${esc(p.IV_Summary)}</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">OI Strikes (I)</div>
+                    <div class="pick-meta-value" style="font-size:0.8rem;white-space:pre-line">${esc(p.OI_Strikes_Summary)}</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">FUT OI-H (J)</div>
+                    <div class="pick-meta-value">${esc(p.BU_FUT_OIH)}</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">Scrip Cycle (K)</div>
+                    <div class="pick-meta-value">${esc(p.BU_Scrip_Cycle)}</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">Sector (L)</div>
+                    <div class="pick-meta-value">${esc(p.BU_Sector)}</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">Sector Cycle (M)</div>
+                    <div class="pick-meta-value">${esc(p.BU_Sector_Cycle)}</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">Sector OI-H (N)</div>
+                    <div class="pick-meta-value">${esc(p.BU_Sector_OIH)}</div>
+                </div>
+            </div>
+            <div class="pick-meta" style="margin-top:8px;border-top:1px solid var(--border-color);padding-top:12px">
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">CE OI Chg%</div>
+                    <div class="pick-meta-value ${pctColor(p.OT_CE_OI_Change_Pct)}">${esc(p.OT_CE_OI_Change_Pct)}%</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">PE OI Chg%</div>
+                    <div class="pick-meta-value ${pctColor(p.OT_PE_OI_Change_Pct)}">${esc(p.OT_PE_OI_Change_Pct)}%</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">IVP</div>
+                    <div class="pick-meta-value">${esc(p.IVP)} <small class="${signalClass(p.IVP_Status)}">(${esc(p.IVP_Status)})</small></div>
+                    <div class="ivp-bar"><div class="ivp-bar-fill ${ivpColor(p.IVP)}" style="width:${parseFloat(p.IVP)||0}%"></div></div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">PCR (OI)</div>
+                    <div class="pick-meta-value">${esc(p.PCR_OI)} ${signalBadge(p.PCR_Signal)}</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">Buildup</div>
+                    <div class="pick-meta-value ${signalClass(p.BU_Signal)}">${esc(p.BU_Type)}</div>
+                </div>
+                <div class="pick-meta-item">
+                    <div class="pick-meta-label">Max Pain</div>
+                    <div class="pick-meta-value">${esc(p.MP_Strike)} <small class="${signalClass(p.MP_Signal)}">${esc(p.MP_Distance_Pct)}%</small></div>
+                </div>
+            </div>
+        </div>`;
+    }
+    document.getElementById('overviewPicks').innerHTML = html;
+}
+
+// ═══ Render: Picks Table (Full) ═══
+function renderPicksTable(picks) {
+    if (!picks || picks.length === 0) {
+        document.getElementById('picksTableContainer').innerHTML = '<div class="empty-state"><p>No picks data yet.</p></div>';
+        return;
+    }
+
+    // Key columns to show (grouped)
+    const cols = [
+        { key: 'Symbol', label: 'Symbol' },
+        { key: 'Overall_Verdict', label: 'Verdict', signal: true },
+        { key: 'TRAP_Indicator', label: 'G: Trap', signal: true },
+        { key: 'TRAP_Note', label: 'Trap Note' },
+        { key: 'IV_Summary', label: 'H: IV Summary' },
+        { key: 'IV_Level', label: 'IV Level' },
+        { key: 'OI_Strikes_Summary', label: 'I: OI Strikes' },
+        { key: 'BU_FUT_OIH', label: 'J: FUT OI-H' },
+        { key: 'BU_Scrip_Cycle', label: 'K: Scrip Cycle' },
+        { key: 'BU_Sector', label: 'L: Sector' },
+        { key: 'BU_Sector_Cycle', label: 'M: Sect Cycle' },
+        { key: 'BU_Sector_OIH', label: 'N: Sect OI-H' },
+        { key: 'OT_CE_OI_Change_Pct', label: 'CE OI Chg%' },
+        { key: 'OT_PE_OI_Change_Pct', label: 'PE OI Chg%' },
+        { key: 'OT_Call_Put_Diff_Pct', label: 'CE-PE Diff%' },
+        { key: 'IVP', label: 'IVP' },
+        { key: 'IVP_Status', label: 'IVP Status', signal: true },
+        { key: 'IV_vs_HV', label: 'IV vs HV' },
+        { key: 'OI_Trend', label: 'OI Trend', signal: true },
+        { key: 'PCR_OI', label: 'PCR OI' },
+        { key: 'PCR_Signal', label: 'PCR Signal', signal: true },
+        { key: 'BU_Type', label: 'Buildup Type' },
+        { key: 'BU_Signal', label: 'BU Signal', signal: true },
+        { key: 'FUT_OI_Change_Pct', label: 'FUT OI Chg%' },
+        { key: 'FUT_Signal', label: 'FUT Signal', signal: true },
+        { key: 'MP_Strike', label: 'Max Pain' },
+        { key: 'MP_Signal', label: 'MP Signal', signal: true },
+        { key: 'Analysis_Time', label: 'Time' },
+    ];
+
+    let html = '<table class="data-table"><thead><tr>';
+    for (const c of cols) html += `<th>${c.label}</th>`;
+    html += '</tr></thead><tbody>';
+
+    for (const p of picks) {
+        html += '<tr>';
+        for (const c of cols) {
+            const val = p[c.key];
+            if (c.signal) {
+                html += `<td>${signalBadge(val)}</td>`;
+            } else if (c.key.includes('Pct') || c.key.includes('Change')) {
+                html += `<td class="${pctColor(val)}">${esc(val)}</td>`;
+            } else {
+                html += `<td>${esc(val)}</td>`;
+            }
+        }
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    document.getElementById('picksTableContainer').innerHTML = html;
+}
+
+// ═══ Render: Signal Analysis ═══
+function renderSignals(picks) {
+    if (!picks || picks.length === 0) {
+        document.getElementById('signalCards').innerHTML = '<div class="empty-state col-12"><p>No signal data yet.</p></div>';
+        return;
+    }
+
+    const signalKeys = [
+        { key: 'TRAP_Indicator', label: 'Writers Trap (G)', icon: 'bi-shield-exclamation' },
+        { key: 'IV_Signal', label: 'IV Signal (H)', icon: 'bi-graph-up' },
+        { key: 'OI_Trend', label: 'OI Trend (I)', icon: 'bi-bar-chart-line' },
+        { key: 'PCR_Signal', label: 'PCR Signal', icon: 'bi-pie-chart' },
+        { key: 'BU_Signal', label: 'Buildup Signal', icon: 'bi-layers' },
+        { key: 'FUT_Signal', label: 'Futures Signal', icon: 'bi-arrow-left-right' },
+        { key: 'MP_Signal', label: 'Max Pain Signal', icon: 'bi-crosshair' },
+    ];
+
+    let html = '';
+    for (const sk of signalKeys) {
+        let bullish = 0, bearish = 0, neutral = 0;
+        for (const p of picks) {
+            const v = String(p[sk.key] || '').toUpperCase();
+            if (v.includes('BULLISH') || v.includes('BUY') || v.includes('CHEAP') || v.includes('FAVORABLE')) bullish++;
+            else if (v.includes('BEARISH') || v.includes('SELL') || v.includes('EXPENSIVE')) bearish++;
+            else neutral++;
+        }
+        const total = picks.length || 1;
+
+        html += `
+        <div class="col-md-4 col-lg-3">
+            <div class="card-dark">
+                <div class="card-title"><i class="bi ${sk.icon}"></i> ${sk.label}</div>
+                <div class="d-flex justify-content-between" style="margin-top:8px">
+                    <span class="text-bullish"><strong>${bullish}</strong> Bull</span>
+                    <span class="text-bearish"><strong>${bearish}</strong> Bear</span>
+                    <span class="text-mixed"><strong>${neutral}</strong> Other</span>
+                </div>
+                <div class="signal-bar" style="margin-top:8px;display:flex;overflow:hidden;gap:2px">
+                    <div style="width:${(bullish/total)*100}%;height:8px;background:var(--accent-green);border-radius:4px"></div>
+                    <div style="width:${(bearish/total)*100}%;height:8px;background:var(--accent-red);border-radius:4px"></div>
+                    <div style="width:${(neutral/total)*100}%;height:8px;background:var(--accent-orange);border-radius:4px"></div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    // Overall summary gauge
+    const summary = {};
+    let totalBull = 0, totalBear = 0, totalNeutral = 0;
+    for (const p of picks) {
+        const v = String(p.Overall_Verdict || '').toUpperCase();
+        if (v.includes('BULLISH')) totalBull++;
+        else if (v.includes('BEARISH')) totalBear++;
+        else totalNeutral++;
+    }
+    const totalAll = picks.length || 1;
+    const bullPct = Math.round((totalBull / totalAll) * 100);
+    const dominant = totalBull >= totalBear ? (totalBull > totalNeutral ? 'BULLISH' : 'MIXED') : (totalBear > totalNeutral ? 'BEARISH' : 'MIXED');
+    const dominantColor = dominant === 'BULLISH' ? 'var(--accent-green)' : dominant === 'BEARISH' ? 'var(--accent-red)' : 'var(--accent-orange)';
+
+    html += `
+    <div class="col-md-4 col-lg-3">
+        <div class="card-dark" style="text-align:center">
+            <div class="card-title">Overall Verdict</div>
+            <div class="gauge-container" style="justify-content:center">
+                <div class="gauge-ring">
+                    <svg viewBox="0 0 36 36">
+                        <circle class="bg" cx="18" cy="18" r="14" />
+                        <circle class="fill" cx="18" cy="18" r="14"
+                            stroke="${dominantColor}"
+                            stroke-dasharray="${bullPct} ${100 - bullPct}"
+                            stroke-dashoffset="0" />
+                    </svg>
+                    <span class="gauge-label" style="color:${dominantColor}">${bullPct}%</span>
+                </div>
+            </div>
+            <div style="font-weight:700;color:${dominantColor}">${dominant}</div>
+            <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:4px">
+                ${totalBull}B / ${totalBear}Be / ${totalNeutral}N
+            </div>
+        </div>
+    </div>`;
+
+    document.getElementById('signalCards').innerHTML = html;
+}
+
+// ═══ Render: Raw Triggers Table ═══
+function renderTriggers(data) {
+    if (!data.triggers || data.triggers.length === 0) {
+        document.getElementById('triggersTableContainer').innerHTML = '<div class="empty-state"><p>No triggers data yet.</p></div>';
+        return;
+    }
+
+    const triggers = data.triggers;
+    const keys = Object.keys(triggers[0]);
+
+    let html = '<table class="data-table"><thead><tr>';
+    for (const k of keys) html += `<th>${esc(k)}</th>`;
+    html += '</tr></thead><tbody>';
+
+    for (const row of triggers) {
+        html += '<tr>';
+        for (const k of keys) html += `<td>${esc(row[k])}</td>`;
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    document.getElementById('triggersTableContainer').innerHTML = html;
+}
+
+// ═══ Render: History ═══
+function renderHistory(historyData, summaryData) {
+    // Daily summary cards
+    if (summaryData.summary && summaryData.summary.length > 0) {
+        let shtml = '<div class="row g-3 mb-3">';
+        for (const day of summaryData.summary.slice(-7).reverse()) {
+            const sigClass = String(day['Dominant Signal']).toUpperCase().includes('BULLISH') ? 'text-bullish' :
+                            String(day['Dominant Signal']).toUpperCase().includes('BEARISH') ? 'text-bearish' : 'text-mixed';
+            shtml += `
+            <div class="col-md-4 col-lg-3">
+                <div class="card-dark">
+                    <div class="card-title">${esc(day.Date)}</div>
+                    <div class="card-value" style="font-size:1.4rem">${day['Total Picks'] || 0} picks</div>
+                    <div class="card-subtitle">${day['Unique Symbols'] || 0} symbols | <span class="${sigClass}">${esc(day['Dominant Signal'])}</span></div>
+                    <div class="card-subtitle" style="margin-top:4px">${esc(day.Symbols)}</div>
+                </div>
+            </div>`;
+        }
+        shtml += '</div>';
+        document.getElementById('dailySummary').innerHTML = shtml;
+    }
+
+    // History table
+    if (!historyData.history || historyData.history.length === 0) {
+        document.getElementById('historyTableContainer').innerHTML = '<div class="empty-state"><p>No history yet.</p></div>';
+        return;
+    }
+
+    const rows = historyData.history;
+    const showCols = ['Symbol', 'Analysis_Time', 'Overall_Verdict', 'TRAP_Indicator', 'IV_Summary',
+                      'BU_FUT_OIH', 'BU_Scrip_Cycle', 'OT_CE_OI_Change_Pct', 'IVP', 'PCR_Signal', 'BU_Signal'];
+    const colLabels = ['Symbol', 'Time', 'Verdict', 'Trap(G)', 'IV(H)', 'FUT OI-H(J)', 'Cycle(K)', 'CE OI%', 'IVP', 'PCR', 'Buildup'];
+
+    let html = '<table class="data-table"><thead><tr>';
+    for (const l of colLabels) html += `<th>${l}</th>`;
+    html += '</tr></thead><tbody>';
+
+    for (const row of rows.slice(-100).reverse()) {
+        html += '<tr>';
+        for (const k of showCols) {
+            const val = row[k];
+            if (['Overall_Verdict','TRAP_Indicator','PCR_Signal','BU_Signal'].includes(k)) {
+                html += `<td>${signalBadge(val)}</td>`;
+            } else {
+                html += `<td>${esc(val)}</td>`;
+            }
+        }
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    document.getElementById('historyTableContainer').innerHTML = html;
+}
+
+// ═══ Render: Watchlist ═══
+function renderWatchlist(data) {
+    if (!data.symbols || data.symbols.length === 0) {
+        document.getElementById('watchlistInfo').innerHTML = '<div class="empty-state"><p>No watchlist found.</p></div>';
+        return;
+    }
+
+    let html = `<div class="card-title">WBRam Watchlist (${data.count} symbols)</div>`;
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">';
+    for (const s of data.symbols) {
+        html += `<span style="background:var(--bg-card-hover);padding:4px 12px;border-radius:6px;font-size:0.85rem;border:1px solid var(--border-color)">${esc(s)}</span>`;
+    }
+    html += '</div>';
+    document.getElementById('watchlistInfo').innerHTML = html;
+}
+
+// ═══ Update Status ═══
+function updateStatus(status) {
+    if (!status) return;
+    const m = status.market || {};
+
+    // Market badge
+    const badge = document.getElementById('marketBadge');
+    if (m.is_open) {
+        badge.className = 'market-badge market-open';
+        badge.textContent = `OPEN ${m.start}-${m.end}`;
+    } else {
+        badge.className = 'market-badge market-closed';
+        badge.textContent = `CLOSED (${m.start}-${m.end})`;
+    }
+
+    // KPI market
+    document.getElementById('kpiMarketTime').textContent = m.current_time || '--';
+    document.getElementById('kpiMarketMode').textContent = m.mode === 'EXTENDED'
+        ? `Extended until ${m.extended_until}`
+        : 'Normal hours';
+
+    // Last update
+    document.getElementById('lastUpdate').textContent = status.last_modified || 'No data yet';
+}
+
+// ═══ Master Refresh ═══
+async function refreshAll() {
+    const [status, picks, triggers, history, summary, watchlist] = await Promise.all([
+        fetchJSON('/api/status'),
+        fetchJSON('/api/picks'),
+        fetchJSON('/api/triggers'),
+        fetchJSON('/api/history'),
+        fetchJSON('/api/daily-summary'),
+        fetchJSON('/api/watchlist'),
+    ]);
+
+    if (status) updateStatus(status);
+    if (picks) {
+        renderOverview(picks);
+        renderPicksTable(picks.picks);
+        renderSignals(picks.picks);
+    }
+    if (triggers) renderTriggers(triggers);
+    if (history && summary) renderHistory(history, summary);
+    if (watchlist) renderWatchlist(watchlist);
+}
+
+// ═══ Init ═══
+refreshAll();
+autoRefreshInterval = setInterval(refreshAll, REFRESH_MS);
+</script>
+</body>
+</html>
