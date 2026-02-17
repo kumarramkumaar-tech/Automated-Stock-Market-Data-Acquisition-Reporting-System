@@ -1,0 +1,10 @@
+selenium
+webdriver-manager
+pandas
+openpyxl
+schedule
+python-dotenv
+matplotlib
+requests
+gspread
+google-auth
