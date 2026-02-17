@@ -166,24 +166,32 @@ def _load_local_watchlist(cfg):
     """
     Load watchlist from local Excel file.
     Tries primary path first, then fallback path.
-    Primary: D:\\Ram Claude\\2026\\Feb-Claude\\MP STOCKS SR FILE-M.xlsx
-    Fallback: watchlist/WBRam_Watchlist.xlsx
+    Resolves relative paths from the project directory (where config.json lives).
     """
     wl_cfg = cfg.get("watchlist", cfg.get("google_sheet", {}))
     primary_file = wl_cfg.get("local_file", "watchlist/WBRam_Watchlist.xlsx")
     fallback_file = wl_cfg.get("local_file_fallback", "watchlist/WBRam_Watchlist.xlsx")
 
+    # Resolve relative paths from the script's directory (project root)
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
     # Try primary path first, then fallback
     for filepath in [primary_file, fallback_file]:
         if not filepath:
             continue
-        if os.path.exists(filepath):
-            try:
-                df = pd.read_excel(filepath)
-                logger.info(f"Loaded {len(df)} rows from watchlist: {filepath}")
-                return df
-            except Exception as e:
-                logger.warning(f"Failed to read {filepath}: {e}")
+        # Try path as-is first (absolute or relative to CWD)
+        candidates = [filepath]
+        # Also try resolving relative to the project directory
+        if not os.path.isabs(filepath):
+            candidates.append(os.path.join(script_dir, filepath))
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                try:
+                    df = pd.read_excel(candidate)
+                    logger.info(f"Loaded {len(df)} rows from watchlist: {candidate}")
+                    return df
+                except Exception as e:
+                    logger.warning(f"Failed to read {candidate}: {e}")
 
     logger.warning(f"No watchlist found at: {primary_file} or {fallback_file}")
     return pd.DataFrame()

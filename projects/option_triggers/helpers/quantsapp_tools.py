@@ -73,22 +73,30 @@ def _get_page_text_data(driver, wait_seconds=10):
         "[class*='value']", "[class*='data']", ".info-row"
     ]
 
-    data = {}
-    for selector in selectors:
-        elements = driver.find_elements(By.CSS_SELECTOR, selector)
-        for elem in elements:
-            text = elem.text.strip()
-            if text:
-                # Try to parse "Label: Value" or "Label\nValue" patterns
-                if ":" in text:
-                    parts = text.split(":", 1)
-                    data[parts[0].strip()] = parts[1].strip()
-                elif "\n" in text:
-                    lines = text.split("\n")
-                    if len(lines) >= 2:
-                        data[lines[0].strip()] = lines[1].strip()
-
-    return data
+    for attempt in range(3):
+        try:
+            data = {}
+            for selector in selectors:
+                elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                for elem in elements:
+                    text = elem.text.strip()
+                    if text:
+                        # Try to parse "Label: Value" or "Label\nValue" patterns
+                        if ":" in text:
+                            parts = text.split(":", 1)
+                            data[parts[0].strip()] = parts[1].strip()
+                        elif "\n" in text:
+                            lines = text.split("\n")
+                            if len(lines) >= 2:
+                                data[lines[0].strip()] = lines[1].strip()
+            return data
+        except StaleElementReferenceException:
+            if attempt < 2:
+                logger.warning(f"StaleElement in _get_page_text_data attempt {attempt + 1}, retrying...")
+                time.sleep(2)
+            else:
+                logger.error("StaleElement in _get_page_text_data persisted after retries.")
+                return {}
 
 
 def _search_symbol_on_page(driver, symbol, wait_seconds=5):
@@ -107,30 +115,36 @@ def _search_symbol_on_page(driver, symbol, wait_seconds=5):
     ]
 
     for selector in search_selectors:
-        try:
-            search_input = driver.find_element(By.CSS_SELECTOR, selector)
-            search_input.clear()
-            search_input.send_keys(symbol)
-            time.sleep(2)
+        for attempt in range(2):
+            try:
+                search_input = driver.find_element(By.CSS_SELECTOR, selector)
+                search_input.clear()
+                search_input.send_keys(symbol)
+                time.sleep(2)
 
-            # Try clicking a dropdown suggestion
-            suggestion_selectors = [
-                f"[class*='dropdown'] [class*='item']",
-                f"[class*='suggestion']",
-                f"[class*='option']",
-                f"li[class*='result']",
-                f".dropdown-menu a",
-            ]
-            for sug_sel in suggestion_selectors:
-                suggestions = driver.find_elements(By.CSS_SELECTOR, sug_sel)
-                for sug in suggestions:
-                    if symbol.upper() in sug.text.upper():
-                        sug.click()
-                        time.sleep(3)
-                        return True
-            return True
-        except Exception:
-            continue
+                # Try clicking a dropdown suggestion
+                suggestion_selectors = [
+                    f"[class*='dropdown'] [class*='item']",
+                    f"[class*='suggestion']",
+                    f"[class*='option']",
+                    f"li[class*='result']",
+                    f".dropdown-menu a",
+                ]
+                for sug_sel in suggestion_selectors:
+                    suggestions = driver.find_elements(By.CSS_SELECTOR, sug_sel)
+                    for sug in suggestions:
+                        if symbol.upper() in sug.text.upper():
+                            sug.click()
+                            time.sleep(3)
+                            return True
+                return True
+            except StaleElementReferenceException:
+                if attempt == 0:
+                    time.sleep(2)
+                    continue
+                break
+            except Exception:
+                break
 
     return False
 
