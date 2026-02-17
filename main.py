@@ -13,6 +13,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import StaleElementReferenceException
 from webdriver_manager.chrome import ChromeDriverManager
 
 from helpers.excel_utils import append_df_to_excel
@@ -59,18 +60,29 @@ def fetch_table_data():
         logging.warning(f"Table not found: {e}")
         return pd.DataFrame()
 
-    rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
-    all_rows = []
-    for row in rows:
-        cols = [td.text.strip() for td in row.find_elements(By.TAG_NAME, "td")]
-        if len(cols) >= 11:
-            all_rows.append(cols[:11])
-
     columns = [
         "Signal Type", "Symbol", "Expiry", "Strike", "Type",
         "Signal Prev Val", "Signal Cur Val", "Change %",
         "Price Change %", "Builtup Type", "Timestamp"
     ]
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+            all_rows = []
+            for row in rows:
+                cols = [td.text.strip() for td in row.find_elements(By.TAG_NAME, "td")]
+                if len(cols) >= 11:
+                    all_rows.append(cols[:11])
+            break
+        except StaleElementReferenceException:
+            if attempt < max_retries - 1:
+                logging.warning(f"StaleElementReferenceException on attempt {attempt + 1}, retrying...")
+                time.sleep(2)
+            else:
+                logging.error("StaleElementReferenceException persisted after retries.")
+                return pd.DataFrame()
 
     df = pd.DataFrame(all_rows, columns=columns)
     df["Fetched At"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

@@ -23,6 +23,7 @@ from datetime import datetime
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import StaleElementReferenceException
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +37,22 @@ def _wait_and_get_table(driver, wait_seconds=15):
     except Exception:
         return []
 
-    rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
-    all_rows = []
-    for row in rows:
-        cols = [td.text.strip() for td in row.find_elements(By.TAG_NAME, "td")]
-        if cols:
-            all_rows.append(cols)
-    return all_rows
+    for attempt in range(3):
+        try:
+            rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+            all_rows = []
+            for row in rows:
+                cols = [td.text.strip() for td in row.find_elements(By.TAG_NAME, "td")]
+                if cols:
+                    all_rows.append(cols)
+            return all_rows
+        except StaleElementReferenceException:
+            if attempt < 2:
+                logger.warning(f"StaleElementReferenceException on attempt {attempt + 1}, retrying...")
+                time.sleep(2)
+            else:
+                logger.error("StaleElementReferenceException persisted after retries.")
+                return []
 
 
 def _get_page_text_data(driver, wait_seconds=10):
