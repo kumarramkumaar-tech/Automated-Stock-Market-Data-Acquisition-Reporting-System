@@ -1,0 +1,349 @@
+# main.py – Option Triggers Module (Priority Project 1)
+#
+# Automated 40-minute cycle that:
+#   1. Opens Quantsapp Option Triggers page
+#   2. Scrapes all trigger data
+#   3. Applies 4-Rule Filter:
+#      Rule 1: Highest CE OI Changes
+#      Rule 2: Call-Put diff between -1% to +1%
+#      Rule 3: Stock must be in WBRam Google Sheet watchlist
+#      Rule 4: Column O (LTP) must be TRUE, then check price columns
+#   4. For each qualifying stock, navigates to ALL Quantsapp tools:
+#      - Option Triggers (CE/PE OI, volumes, trigger type)
+#      - IV Analysis (IV, IVP, IV Rank, HV, IV vs HV)
+#      - OI Analysis (Total OI, max strikes, support/resistance)
+#      - PCR Analysis (PCR by OI/Volume, trend)
+#      - Buildup (Long/Short Buildup, Unwinding, Covering)
+#      - Futures OI (OI change, basis, signal)
+#      - Max Pain (Max pain strike, distance from CMP)
+#   5. Saves 40+ column Excel with per-tool analysis
+#   6. Generates PDF visual reports per stock
+#   7. Sends Telegram announcement:
+#      "Stock Pick from WBRam Excel is <STOCK NAME>" + full analysis
+
+import json
+import os
+import sys
+import time
+import logging
+from datetime import datetime
+
+import pandas as pd
+import schedule
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+
+from helpers.excel_utils import append_df_to_excel, write_sheet
+from helpers.notify import send_telegram, send_telegram_file
+from helpers.report_utils import save_picks_to_excel, update_summary, format_excel
+from helpers.report_visuals import generate_visual_report, generate_summary_report
+from helpers.stock_picker import run_stock_picker
+from helpers.quantsapp_tools import _wait_and_get_table
+
+
+# ── Logging ──────────────────────────────────────────────────
+os.makedirs("logs", exist_ok=True)
+logging.basicConfig(
+    filename="logs/option_triggers.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# Also log to console
+console = logging.StreamHandler()
+console.setLevel(logging.INFO)
+logging.getLogger("").addHandler(console)
+
+
+# ── Load Config ──────────────────────────────────────────────
+with open("config.json") as f:
+    cfg = json.load(f)
+
+
+# ── Setup Browser ────────────────────────────────────────────
+options = webdriver.ChromeOptions()
+if cfg.get("headless"):
+    options.add_argument("--headless=new")
+options.add_argument("--start-maximized")
+options.add_argument("--disable-notifications")
+
+driver = webdriver.Chrome(
+    service=Service(ChromeDriverManager().install()),
+    options=options,
+)
+
+# Navigate to Option Triggers page
+driver.get(cfg["start_url"])
+
+print("=" * 60)
+print("  OPTION TRIGGERS MODULE – Priority Project 1")
+print("=" * 60)
+print()
+print("STEP 1: Login to Quantsapp manually with OTP")
+print("STEP 2: Navigate to Option Triggers page")
+print("STEP 3: Make sure the following tabs/tools are accessible:")
+print("   - Option Triggers")
+print("   - IV Analysis (IVP)")
+print("   - OI Analysis")
+print("   - PCR Analysis")
+print("   - Buildup")
+print("   - Futures OI")
+print("   - Max Pain")
+print("   - Option Chain")
+print()
+input("Press Enter after login and setup is complete...")
+
+
+# ── Core: Scrape Option Triggers Table ───────────────────────
+def fetch_option_triggers():
+    """
+    Scrape the Option Triggers table from Quantsapp.
+    Returns DataFrame with all trigger rows.
+    """
+    try:
+        driver.get(cfg["start_url"])
+        time.sleep(5)
+
+        WebDriverWait(driver, cfg["max_table_wait_seconds"]).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table tbody tr"))
+        )
+    except Exception as e:
+        logger.warning(f"Option Triggers table not found: {e}")
+        return pd.DataFrame()
+
+    rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+    all_rows = []
+
+    for row in rows:
+        cols = [td.text.strip() for td in row.find_elements(By.TAG_NAME, "td")]
+        if cols:
+            all_rows.append(cols)
+
+    if not all_rows:
+        return pd.DataFrame()
+
+    # Determine columns from header row
+    try:
+        header_els = driver.find_elements(By.CSS_SELECTOR, "table thead th")
+        headers = [th.text.strip() for th in header_els]
+    except Exception:
+        headers = []
+
+    # If headers not found, use defaults based on typical Option Triggers layout
+    if not headers or len(headers) < len(all_rows[0]):
+        max_cols = max(len(r) for r in all_rows)
+        headers = [
+            "Symbol", "Expiry", "Strike", "Type",
+            "CE OI", "CE OI Change", "CE OI Change %",
+            "PE OI", "PE OI Change", "PE OI Change %",
+            "CE Volume", "PE Volume",
+            "LTP", "Change %", "Trigger Type"
+        ]
+        # Pad or trim to match actual column count
+        if len(headers) < max_cols:
+            headers.extend([f"Col_{i}" for i in range(len(headers), max_cols)])
+        headers = headers[:max_cols]
+
+    # Normalize row lengths
+    normalized = []
+    for row in all_rows:
+        if len(row) < len(headers):
+            row.extend([""] * (len(headers) - len(row)))
+        normalized.append(row[:len(headers)])
+
+    df = pd.DataFrame(normalized, columns=headers)
+    df["Fetched At"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    logger.info(f"Scraped {len(df)} rows from Option Triggers")
+    return df
+
+
+# ── Core: Full 40-Minute Cycle ───────────────────────────────
+def run_cycle():
+    """
+    One complete 40-minute cycle:
+      1. Scrape Option Triggers table
+      2. Save raw data to Excel
+      3. Apply 4-Rule filter to find stock picks
+      4. For each pick: collect ALL Quantsapp tool data
+      5. Save detailed 40+ column analysis to Excel
+      6. Generate visual PDF reports
+      7. Send Telegram announcements
+    """
+    cycle_start = datetime.now()
+    logger.info(f"{'='*50}")
+    logger.info(f"Starting cycle at {cycle_start.strftime('%H:%M:%S')}")
+
+    try:
+        # ── Step 1: Refresh and scrape Option Triggers ────
+        if cfg.get("auto_refresh_page", False):
+            driver.refresh()
+            time.sleep(5)
+
+        triggers_df = fetch_option_triggers()
+
+        if triggers_df.empty:
+            msg = f"No data from Option Triggers at {cycle_start.strftime('%H:%M:%S')}"
+            logger.warning(msg)
+            send_telegram(msg)
+            return
+
+        # ── Step 2: Save raw triggers to Excel ────────────
+        output_file = cfg["output_file"]
+        for attempt in range(cfg.get("max_retry_attempts", 3)):
+            try:
+                append_df_to_excel(output_file, triggers_df, sheet_name="Triggers_Raw")
+                break
+            except PermissionError:
+                logger.warning(f"Excel locked – retry {attempt + 1}")
+                time.sleep(10)
+        else:
+            raise PermissionError("Excel file locked after max retries")
+
+        logger.info(f"Saved {len(triggers_df)} raw trigger rows to Excel")
+
+        # ── Step 3: Run 4-Rule Stock Picker ───────────────
+        logger.info("Running 4-Rule Stock Picker...")
+        picks, announcement = run_stock_picker(driver, triggers_df, cfg)
+
+        if not picks:
+            msg = f"No stocks qualified after 4-rule filter at {cycle_start.strftime('%H:%M:%S')}"
+            logger.info(msg)
+            send_telegram(msg)
+
+            # Still update summary and format
+            try:
+                update_summary(output_file)
+                format_excel(output_file)
+            except Exception as e:
+                logger.warning(f"Post-cycle formatting failed: {e}")
+            return
+
+        # ── Step 4: Save detailed analysis to Excel ───────
+        logger.info(f"Saving {len(picks)} stock picks with full tool analysis...")
+        save_picks_to_excel(picks, output_file)
+
+        # ── Step 5: Format Excel ──────────────────────────
+        try:
+            update_summary(output_file)
+            format_excel(output_file)
+        except Exception as e:
+            logger.warning(f"Excel formatting failed: {e}")
+
+        # ── Step 6: Generate visual reports ───────────────
+        try:
+            generate_visual_report(output_file, report_dir="reports")
+        except Exception as e:
+            logger.warning(f"Visual report failed: {e}")
+
+        # ── Step 7: Send Telegram announcement ────────────
+        for pick in picks:
+            symbol = pick.get("Symbol", "Unknown")
+            ivp_status = pick.get("IVP_Status", "N/A")
+            bu_type = pick.get("BU_Type", "N/A")
+            verdict = pick.get("Overall_Verdict", "N/A")
+
+            msg = (
+                f"*Stock Pick from WBRam Excel is \"{symbol}\"*\n"
+                f"{'─' * 30}\n"
+                f"*Option Triggers:*\n"
+                f"  CE OI Change: {pick.get('OT_CE_OI_Change_Pct', 'N/A')}%\n"
+                f"  PE OI Change: {pick.get('OT_PE_OI_Change_Pct', 'N/A')}%\n"
+                f"  Call-Put Diff: {pick.get('OT_Call_Put_Diff_Pct', 'N/A')}%\n"
+                f"  LTP: {pick.get('OT_LTP', 'N/A')}\n\n"
+                f"*IV Analysis:*\n"
+                f"  IVP: {pick.get('IVP', 'N/A')} ({ivp_status})\n"
+                f"  IV: {pick.get('IV', 'N/A')} | HV: {pick.get('HV', 'N/A')}\n"
+                f"  IV Signal: {pick.get('IV_Signal', 'N/A')}\n\n"
+                f"*OI Analysis:*\n"
+                f"  Resistance: {pick.get('OI_Max_CE_Strike', 'N/A')}\n"
+                f"  Support: {pick.get('OI_Max_PE_Strike', 'N/A')}\n"
+                f"  OI Trend: {pick.get('OI_Trend', 'N/A')}\n\n"
+                f"*PCR:* {pick.get('PCR_OI', 'N/A')} ({pick.get('PCR_Signal', 'N/A')})\n"
+                f"*Buildup:* {bu_type} ({pick.get('BU_Signal', 'N/A')})\n"
+                f"*Futures OI:* {pick.get('FUT_OI_Change_Pct', 'N/A')}% ({pick.get('FUT_Signal', 'N/A')})\n"
+                f"*Max Pain:* {pick.get('MP_Strike', 'N/A')} ({pick.get('MP_Signal', 'N/A')})\n\n"
+                f"*VERDICT: {verdict}*"
+            )
+            send_telegram(msg)
+
+        # ── Step 8: Send Excel file to Telegram ───────────
+        try:
+            send_telegram_file(output_file)
+        except Exception as e:
+            logger.warning(f"Failed to send Excel via Telegram: {e}")
+
+        # Cycle complete
+        duration = (datetime.now() - cycle_start).total_seconds()
+        done_msg = (
+            f"Cycle complete: {len(picks)} picks analyzed "
+            f"in {duration:.0f}s at {datetime.now().strftime('%H:%M:%S')}"
+        )
+        logger.info(done_msg)
+        send_telegram(done_msg)
+
+    except Exception as e:
+        err = f"Cycle error at {datetime.now().strftime('%H:%M:%S')}: {e}"
+        logger.error(err, exc_info=True)
+        send_telegram(err)
+        time.sleep(60)
+
+
+# ── Navigate back to Option Triggers before cycle ────────────
+def pre_cycle():
+    """Navigate back to Option Triggers page before each cycle."""
+    try:
+        driver.get(cfg["start_url"])
+        time.sleep(3)
+    except Exception as e:
+        logger.warning(f"Pre-cycle navigation failed: {e}")
+
+
+# ── Scheduler ────────────────────────────────────────────────
+
+# First immediate run
+logger.info("Running first cycle immediately...")
+run_cycle()
+
+# Schedule every 40 minutes
+interval = cfg.get("fetch_interval_minutes", 40)
+schedule.every(interval).minutes.do(lambda: (pre_cycle(), run_cycle()))
+
+# Daily summary at 15:30 (after market close)
+schedule.every().day.at("15:30").do(lambda: generate_summary_report(cfg["output_file"]))
+
+# Daily full report at 23:59
+schedule.every().day.at("23:59").do(lambda: (
+    update_summary(cfg["output_file"]),
+    generate_summary_report(cfg["output_file"]),
+))
+
+print()
+print(f"Running every {interval} minutes. Press Ctrl+C to stop.")
+print(f"Output file: {cfg['output_file']}")
+print(f"Reports: reports/")
+print()
+
+# ── Main Loop ────────────────────────────────────────────────
+try:
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+except KeyboardInterrupt:
+    stop_msg = "Option Triggers automation stopped by user."
+    print("\n" + stop_msg)
+    logger.info(stop_msg)
+    try:
+        send_telegram(stop_msg)
+    except Exception:
+        pass
+    try:
+        driver.quit()
+    except Exception:
+        pass

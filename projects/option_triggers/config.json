@@ -1,0 +1,72 @@
+{
+  "start_url": "https://web.quantsapp.com/option-triggers",
+  "quantsapp_tools_urls": {
+    "option_triggers": "https://web.quantsapp.com/option-triggers",
+    "option_chain": "https://web.quantsapp.com/option-chain",
+    "unusual_activity": "https://web.quantsapp.com/unusual-option-activity",
+    "oi_analysis": "https://web.quantsapp.com/oi-analysis",
+    "iv_analysis": "https://web.quantsapp.com/iv-analysis",
+    "pcr_analysis": "https://web.quantsapp.com/pcr",
+    "buildup": "https://web.quantsapp.com/buildup",
+    "futures_oi": "https://web.quantsapp.com/futures-oi",
+    "max_pain": "https://web.quantsapp.com/max-pain",
+    "multi_strike_oi": "https://web.quantsapp.com/multi-strike-oi"
+  },
+  "fetch_interval_minutes": 40,
+  "output_file": "output/Option_Triggers_Analysis.xlsx",
+  "sheet_name": "Triggers_Raw",
+  "headless": false,
+  "max_table_wait_seconds": 20,
+  "auto_refresh_page": true,
+  "max_retry_attempts": 3,
+
+  "google_sheet": {
+    "sheet_id": "YOUR_GOOGLE_SHEET_ID_HERE",
+    "worksheet_name": "Sheet1",
+    "symbol_column": "A",
+    "ltp_check_column": "O",
+    "price_columns": ["P", "Q", "R"],
+    "credentials_file": "credentials/google_service_account.json"
+  },
+
+  "filter_rules": {
+    "rule1_min_ce_oi_change_pct": 5.0,
+    "rule2_call_put_diff_min": -1.0,
+    "rule2_call_put_diff_max": 1.0,
+    "rule4_ltp_column_must_be": true
+  },
+
+  "analysis_columns_per_tool": {
+    "option_triggers": [
+      "Symbol", "Expiry", "Strike", "Type", "Trigger Type",
+      "CE OI", "CE OI Change", "CE OI Change %",
+      "PE OI", "PE OI Change", "PE OI Change %",
+      "CE Volume", "PE Volume", "LTP", "Change %"
+    ],
+    "iv_analysis": [
+      "IV", "IVP (IV Percentile)", "IV Rank",
+      "IV_Status", "HV (Historical Vol)", "IV vs HV"
+    ],
+    "oi_analysis": [
+      "Total CE OI", "Total PE OI", "CE OI Chg",
+      "PE OI Chg", "Max CE OI Strike", "Max PE OI Strike",
+      "OI_Trend"
+    ],
+    "pcr_analysis": [
+      "PCR (OI)", "PCR (Volume)", "PCR_Trend",
+      "PCR_Signal"
+    ],
+    "buildup": [
+      "Buildup Type", "Price Change %", "OI Change %",
+      "Buildup_Signal"
+    ],
+    "futures_oi": [
+      "Futures OI", "Futures OI Change", "Futures OI Change %",
+      "Futures Price", "Futures_Signal"
+    ],
+    "max_pain": [
+      "Max Pain Strike", "Current Price", "Distance from Max Pain",
+      "MaxPain_Signal"
+    ]
+  }
+}

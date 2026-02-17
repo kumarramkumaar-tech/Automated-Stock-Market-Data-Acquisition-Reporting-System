@@ -1,6 +1,8 @@
 # Stock Market Automation Projects
 
-4 automation projects built on the same architecture as the original Quantsapp Unusual Activity tracker. Each project follows the same pipeline: **Scrape -> Store -> Analyze -> Visualize -> Notify**.
+5 automation projects built on the same architecture as the original Quantsapp Unusual Activity tracker. Each project follows the same pipeline: **Scrape -> Store -> Analyze -> Visualize -> Notify**.
+
+**Priority Project 1: Option Triggers Module** – See below for full details.
 
 ---
 
@@ -164,6 +166,79 @@ python main.py
 - Reversal alerts when a stock changes buildup type
 - Daily sector summary
 - PDF with stacked pattern distribution + sector heatmap
+
+---
+
+## Project 5: Option Triggers Module (PRIORITY 1)
+
+**Directory:** `projects/option_triggers/`
+
+**What it does:**
+- Scrapes Quantsapp **Option Triggers** page every 40 minutes
+- Applies a **4-Rule Filter** to identify stock picks:
+  - **Rule 1:** Highest CE OI Changes (configurable threshold)
+  - **Rule 2:** Call-Put diff between -1% to +1% (balanced activity)
+  - **Rule 3:** Stock must exist in WBRam Google Sheet watchlist
+  - **Rule 4:** Column O (LTP) must be TRUE, then check price columns (P, Q, R)
+- For each qualifying stock, navigates to **ALL 7 Quantsapp tools** and collects detailed data
+- Generates **40+ column Excel** with per-tool analysis
+- Creates **per-stock PDF visual reports** with IVP gauge, signal dashboard, verdict
+- Sends Telegram: `"Stock Pick from WBRam Excel is <STOCK NAME>"` + full analysis
+
+**Data Sources:** ALL Quantsapp tools via Selenium navigation:
+| Tool | URL | Data Collected |
+|------|-----|----------------|
+| Option Triggers | `option-triggers` | CE/PE OI, OI Change %, Volume, Trigger Type |
+| IV Analysis | `iv-analysis` | IV, IVP, IV Rank, HV, IV vs HV |
+| OI Analysis | `oi-analysis` | Total CE/PE OI, Max OI strikes, PCR |
+| PCR Analysis | `pcr` | PCR by OI, PCR by Volume, Trend |
+| Buildup | `buildup` | Long/Short Buildup, Unwinding, Covering |
+| Futures OI | `futures-oi` | Futures OI, OI Change, Basis |
+| Max Pain | `max-pain` | Max Pain strike, Distance from CMP |
+
+**Output Sheets:**
+| Sheet | Content |
+|-------|---------|
+| `Triggers_Raw` | All scraped Option Triggers data (cumulative log) |
+| `Stock_Picks` | Current cycle picks with 40+ columns from all tools |
+| `Pick_History` | Historical log of all picks across cycles |
+| `Daily_Summary` | Per-day pick count, symbols, dominant signal |
+
+**Excel Column Groups (40+ columns):**
+| Prefix | Tool | Columns |
+|--------|------|---------|
+| `OT_` | Option Triggers | CE OI, CE OI Change, CE OI Change %, PE OI, PE OI Change, PE OI Change %, CE Volume, PE Volume, Trigger Type, LTP, Change %, Call-Put Diff % |
+| `IV/IVP/HV` | IV Analysis | IV, IVP, IV Rank, IVP Status (Very Low→Very High), HV, IV vs HV (Overpriced/Underpriced/Fair), IV Signal |
+| `OI_` | OI Analysis | Total CE OI, Total PE OI, CE OI Change, PE OI Change, Max CE Strike (Resistance), Max PE Strike (Support), PCR from OI, OI Trend |
+| `PCR_` | PCR Analysis | PCR (OI), PCR (Volume), PCR Trend, PCR Signal |
+| `BU_` | Buildup | Buildup Type, Price Change %, OI Change %, Buildup Signal |
+| `FUT_` | Futures OI | Futures OI, OI Change, OI Change %, Price, Basis, Signal |
+| `MP_` | Max Pain | Max Pain Strike, Current Price, Distance, Distance %, Signal |
+| `GS_` | Google Sheet | LTP Status, Price columns from WBRam sheet |
+| - | Overall | **Overall Verdict** (Bullish/Bearish/Mixed with signal count) |
+
+**IVP Classification:**
+| IVP Range | Status | Signal |
+|-----------|--------|--------|
+| 0-20% | Very Low | Options Cheap - Good for Buying |
+| 20-40% | Low | Below Avg - Favorable Buy |
+| 40-60% | Medium | Neutral |
+| 60-80% | High | Expensive - Consider Selling |
+| 80-100% | Very High | Very Expensive - Sell Strategies |
+
+**Google Sheet Setup:**
+1. Create a Google Cloud Service Account (or publish sheet as CSV)
+2. Place service account JSON in `credentials/google_service_account.json`
+3. Set `GOOGLE_SHEET_ID` in `.env` or `config.json`
+4. Sheet structure: Column A = Stock symbols, Column O = LTP TRUE/FALSE, Columns P/Q/R = Price data
+
+**Telegram Alerts:**
+- Per-stock announcement: `"Stock Pick from WBRam Excel is <NAME>"` with full tool analysis
+- Per-tool breakdown: IVP status, OI trend, PCR signal, Buildup type, Futures signal, Max Pain
+- Overall verdict with bullish/bearish signal count
+- Excel file attachment per cycle
+- Daily summary report at 15:30 (post market close)
+- PDF visual report per stock (IVP gauge, signal dashboard, key metrics table, verdict card)
 
 ---
 
