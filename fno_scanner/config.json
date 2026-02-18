@@ -1,0 +1,22 @@
+{
+  "start_url": "https://web.quantsapp.com/fno-scanner",
+  "fetch_interval_minutes": 30,
+  "output_file": "output/FNO_Scanner_Data.xlsx",
+  "sheet_name": "FNO_Data",
+  "headless": false,
+  "max_table_wait_seconds": 30,
+  "auto_refresh_page": true,
+  "max_retry_attempts": 3,
+  "scroll_pause_seconds": 2,
+  "max_scroll_attempts": 20,
+  "filters": {
+    "instrument": "ALL",
+    "expiry": "ALL",
+    "price_change": "",
+    "oi_change": "",
+    "iv_change_pct": "",
+    "segment": "FNO"
+  },
+  "daily_summary_time": "23:59",
+  "analysis_top_n": 20
+}
