@@ -11,6 +11,7 @@
 import os
 import re
 import logging
+import numpy as np
 import pandas as pd
 from datetime import datetime
 
@@ -97,8 +98,21 @@ def apply_rule_1(df, min_ce_oi_change_pct=5.0):
     logger.info(f"Rule 1: Using column '{ce_change_col}' for CE OI Change %")
 
     df = df.copy()
+    # Handle duplicate column names: use iloc to get the first matching column as a Series
+    col_loc = df.columns.get_loc(ce_change_col)
+    if isinstance(col_loc, slice) or (hasattr(col_loc, '__iter__') and not isinstance(col_loc, str)):
+        # Duplicate column name — take the first occurrence
+        if isinstance(col_loc, slice):
+            first_idx = col_loc.start
+        else:
+            first_idx = np.where(col_loc)[0][0] if hasattr(col_loc, '__iter__') else col_loc
+        ce_series = df.iloc[:, first_idx]
+        logger.info(f"Rule 1: Duplicate column '{ce_change_col}' found, using column index {first_idx}")
+    else:
+        ce_series = df[ce_change_col]
+
     df["_ce_oi_change_num"] = pd.to_numeric(
-        df[ce_change_col].astype(str).str.replace("%", "").str.replace(",", ""),
+        ce_series.astype(str).str.replace("%", "").str.replace(",", ""),
         errors="coerce"
     ).fillna(0)
 
