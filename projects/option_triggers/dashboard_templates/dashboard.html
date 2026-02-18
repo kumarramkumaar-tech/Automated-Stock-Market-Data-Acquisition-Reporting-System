@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Option Triggers Dashboard</title>
+    <title>Stock Market Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
@@ -334,13 +334,16 @@
 <div class="dash-header">
     <h1>
         <i class="bi bi-graph-up-arrow"></i>
-        Option Triggers Dashboard
+        Stock Market Dashboard
     </h1>
     <div class="header-right">
         <span><span class="refresh-dot live"></span> <span id="lastUpdate">--</span></span>
         <span id="marketBadge" class="market-badge market-closed">LOADING</span>
-        <a class="btn-download" href="/api/download">
-            <i class="bi bi-download"></i> Excel
+        <a class="btn-download" href="/api/download" style="font-size:0.75rem;padding:6px 12px">
+            <i class="bi bi-download"></i> OT Excel
+        </a>
+        <a class="btn-download" href="/api/ua/download" style="font-size:0.75rem;padding:6px 12px;background:linear-gradient(135deg,#b388ff,#7c4dff)">
+            <i class="bi bi-download"></i> UA Excel
         </a>
     </div>
 </div>
@@ -351,6 +354,7 @@
     <div class="nav-tab" data-tab="picks">Stock Picks</div>
     <div class="nav-tab" data-tab="signals">Signal Analysis</div>
     <div class="nav-tab" data-tab="triggers">Raw Triggers</div>
+    <div class="nav-tab" data-tab="unusual" style="color:var(--accent-purple)">Unusual Activity</div>
     <div class="nav-tab" data-tab="history">History</div>
     <div class="nav-tab" data-tab="watchlist">Watchlist</div>
 </div>
@@ -426,6 +430,81 @@
         <h5 style="font-weight:600;margin-bottom:12px;">Raw Option Triggers (Last 50 rows)</h5>
         <div class="table-scroll" id="triggersTableContainer">
             <div class="empty-state"><p>No triggers data yet.</p></div>
+        </div>
+    </div>
+
+    <!-- ═══ UNUSUAL ACTIVITY TAB ═══ -->
+    <div id="tab-unusual" class="tab-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 style="font-weight:600;margin:0;"><i class="bi bi-lightning-charge" style="color:var(--accent-purple)"></i> Unusual Option Activity</h5>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="card-subtitle" id="uaLastUpdate">Last update: --</span>
+                <a class="btn-download btn-sm" href="/api/ua/download" style="background:linear-gradient(135deg,#b388ff,#7c4dff)"><i class="bi bi-download"></i> Download Excel</a>
+            </div>
+        </div>
+
+        <!-- UA KPI Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-purple)">
+                    <div class="card-title">Total Entries</div>
+                    <div class="card-value" id="uaTotal" style="font-size:1.6rem">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-blue)">
+                    <div class="card-title">Calls</div>
+                    <div class="card-value" id="uaCalls" style="font-size:1.6rem;color:var(--accent-blue)">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-orange)">
+                    <div class="card-title">Puts</div>
+                    <div class="card-value" id="uaPuts" style="font-size:1.6rem;color:var(--accent-orange)">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-green)">
+                    <div class="card-title">Avg Change%</div>
+                    <div class="card-value" id="uaAvgChg" style="font-size:1.6rem">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-green)">
+                    <div class="card-title">Long Buildup</div>
+                    <div class="card-value text-bullish" id="uaLongBU" style="font-size:1.6rem">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-red)">
+                    <div class="card-title">Short Buildup</div>
+                    <div class="card-value text-bearish" id="uaShortBU" style="font-size:1.6rem">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- UA Buildup Breakdown -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="card-dark">
+                    <div class="card-title">Buildup Pattern Distribution</div>
+                    <div class="d-flex gap-3 mt-2 flex-wrap" id="uaBuildupBars">--</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card-dark">
+                    <div class="card-title">Active Symbols</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px" id="uaSymbolTags">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- UA Data Table -->
+        <div class="table-scroll" id="uaTableContainer" style="max-height:600px">
+            <div class="empty-state">
+                <i class="bi bi-lightning d-block"></i>
+                <p>No Unusual Activity data yet. Run the root main.py scraper.</p>
+            </div>
         </div>
     </div>
 
@@ -874,15 +953,148 @@ function updateStatus(status) {
     document.getElementById('lastUpdate').textContent = status.last_modified || 'No data yet';
 }
 
+// ═══ Render: Unusual Activity ═══
+function renderUnusualActivity(data, statusData) {
+    if (!data) return;
+
+    const stats = data.stats || {};
+    const records = data.data || [];
+
+    // Update last modified
+    if (statusData) {
+        document.getElementById('uaLastUpdate').textContent = 'Last update: ' + (statusData.last_modified || '--');
+    }
+
+    // KPI cards
+    document.getElementById('uaTotal').textContent = stats.total || 0;
+    document.getElementById('uaCalls').textContent = stats.calls || 0;
+    document.getElementById('uaPuts').textContent = stats.puts || 0;
+
+    const avgChg = stats.avg_change_pct || 0;
+    const avgEl = document.getElementById('uaAvgChg');
+    avgEl.textContent = avgChg + '%';
+    avgEl.className = 'card-value ' + (avgChg >= 0 ? 'text-bullish' : 'text-bearish');
+    avgEl.style.fontSize = '1.6rem';
+
+    document.getElementById('uaLongBU').textContent = stats.long_buildup || 0;
+    document.getElementById('uaShortBU').textContent = stats.short_buildup || 0;
+
+    // Buildup bars
+    const buTotal = (stats.long_buildup || 0) + (stats.short_buildup || 0) + (stats.long_unwinding || 0) + (stats.short_covering || 0) || 1;
+    const buData = [
+        { label: 'Long Buildup', count: stats.long_buildup || 0, color: 'var(--accent-green)' },
+        { label: 'Short Buildup', count: stats.short_buildup || 0, color: 'var(--accent-red)' },
+        { label: 'Long Unwinding', count: stats.long_unwinding || 0, color: 'var(--accent-orange)' },
+        { label: 'Short Covering', count: stats.short_covering || 0, color: 'var(--accent-blue)' },
+    ];
+    let buHtml = '';
+    for (const b of buData) {
+        const pct = Math.round((b.count / buTotal) * 100);
+        buHtml += `
+        <div style="flex:1;min-width:120px">
+            <div style="font-size:0.72rem;color:var(--text-secondary)">${b.label}</div>
+            <div style="font-weight:700;color:${b.color}">${b.count} <small style="opacity:0.6">(${pct}%)</small></div>
+            <div class="signal-bar" style="margin-top:4px"><div style="width:${pct}%;height:8px;background:${b.color};border-radius:4px"></div></div>
+        </div>`;
+    }
+    document.getElementById('uaBuildupBars').innerHTML = buHtml;
+
+    // Symbol tags
+    const symbols = stats.symbols || [];
+    if (symbols.length > 0) {
+        let tagHtml = '';
+        for (const s of symbols.slice(0, 40)) {
+            tagHtml += `<span style="background:var(--bg-card-hover);padding:3px 10px;border-radius:6px;font-size:0.78rem;border:1px solid var(--border-color)">${esc(s)}</span>`;
+        }
+        if (symbols.length > 40) tagHtml += `<span style="color:var(--text-secondary);font-size:0.78rem">+${symbols.length - 40} more</span>`;
+        document.getElementById('uaSymbolTags').innerHTML = tagHtml;
+    } else {
+        document.getElementById('uaSymbolTags').innerHTML = '<span style="color:var(--text-secondary)">No symbols yet</span>';
+    }
+
+    // Data table
+    if (records.length === 0) {
+        document.getElementById('uaTableContainer').innerHTML = '<div class="empty-state"><i class="bi bi-lightning d-block"></i><p>No Unusual Activity data yet.</p></div>';
+        return;
+    }
+
+    const uaCols = [
+        { key: 'Symbol', label: 'Symbol' },
+        { key: 'Signal Type', label: 'Signal' },
+        { key: 'Type', label: 'CE/PE' },
+        { key: 'Strike', label: 'Strike' },
+        { key: 'Expiry', label: 'Expiry' },
+        { key: 'Signal Prev Val', label: 'Prev Val' },
+        { key: 'Signal Cur Val', label: 'Cur Val' },
+        { key: 'Change %', label: 'Change%' },
+        { key: 'Price Change %', label: 'Price Chg%' },
+        { key: 'Builtup Type', label: 'Buildup' },
+        { key: 'Fetched At', label: 'Time' },
+    ];
+
+    // Also handle alternate column names
+    const altKeys = {
+        'Builtup Type': ['Builtup Type', 'Buildup Type', 'BuildupType'],
+        'Signal Type': ['Signal Type', 'SignalType'],
+        'Signal Prev Val': ['Signal Prev Val', 'Prev Val'],
+        'Signal Cur Val': ['Signal Cur Val', 'Cur Val'],
+    };
+
+    function getVal(row, colDef) {
+        let val = row[colDef.key];
+        if (val !== undefined && val !== null && val !== '') return val;
+        const alts = altKeys[colDef.key];
+        if (alts) {
+            for (const a of alts) {
+                if (row[a] !== undefined && row[a] !== null && row[a] !== '') return row[a];
+            }
+        }
+        return '';
+    }
+
+    let html = '<table class="data-table"><thead><tr>';
+    for (const c of uaCols) html += `<th>${c.label}</th>`;
+    html += '</tr></thead><tbody>';
+
+    for (const row of records.slice().reverse()) {
+        html += '<tr>';
+        for (const c of uaCols) {
+            const val = getVal(row, c);
+            if (c.key === 'Change %' || c.key === 'Price Change %') {
+                html += `<td class="${pctColor(val)}" style="font-weight:600">${esc(val)}</td>`;
+            } else if (c.key === 'Builtup Type') {
+                const bu = String(val).toUpperCase();
+                let cls = '';
+                if (bu.includes('LONG BUILDUP') || bu.includes('LONG BUILD')) cls = 'text-bullish';
+                else if (bu.includes('SHORT BUILDUP') || bu.includes('SHORT BUILD')) cls = 'text-bearish';
+                else if (bu.includes('LONG UNWIND')) cls = 'text-mixed';
+                else if (bu.includes('SHORT COVER')) cls = 'text-bullish';
+                html += `<td class="${cls}" style="font-weight:600">${esc(val)}</td>`;
+            } else if (c.key === 'Type') {
+                const t = String(val).toUpperCase();
+                const cls = (t === 'CALL' || t === 'CE') ? 'color:var(--accent-blue)' : (t === 'PUT' || t === 'PE') ? 'color:var(--accent-orange)' : '';
+                html += `<td style="${cls};font-weight:600">${esc(val)}</td>`;
+            } else {
+                html += `<td>${esc(val)}</td>`;
+            }
+        }
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    document.getElementById('uaTableContainer').innerHTML = html;
+}
+
 // ═══ Master Refresh ═══
 async function refreshAll() {
-    const [status, picks, triggers, history, summary, watchlist] = await Promise.all([
+    const [status, picks, triggers, history, summary, watchlist, uaData, uaStatus] = await Promise.all([
         fetchJSON('/api/status'),
         fetchJSON('/api/picks'),
         fetchJSON('/api/triggers'),
         fetchJSON('/api/history'),
         fetchJSON('/api/daily-summary'),
         fetchJSON('/api/watchlist'),
+        fetchJSON('/api/ua/data'),
+        fetchJSON('/api/ua/status'),
     ]);
 
     if (status) updateStatus(status);
@@ -894,6 +1106,7 @@ async function refreshAll() {
     if (triggers) renderTriggers(triggers);
     if (history && summary) renderHistory(history, summary);
     if (watchlist) renderWatchlist(watchlist);
+    if (uaData) renderUnusualActivity(uaData, uaStatus);
 }
 
 // ═══ Init ═══
