@@ -345,6 +345,9 @@
         <a class="btn-download" href="/api/ua/download" style="font-size:0.75rem;padding:6px 12px;background:linear-gradient(135deg,#b388ff,#7c4dff)">
             <i class="bi bi-download"></i> UA Excel
         </a>
+        <a class="btn-download" href="/api/fno/download" style="font-size:0.75rem;padding:6px 12px;background:linear-gradient(135deg,#ff9100,#e65100)">
+            <i class="bi bi-download"></i> FNO Excel
+        </a>
     </div>
 </div>
 
@@ -355,6 +358,7 @@
     <div class="nav-tab" data-tab="signals">Signal Analysis</div>
     <div class="nav-tab" data-tab="triggers">Raw Triggers</div>
     <div class="nav-tab" data-tab="unusual" style="color:var(--accent-purple)">Unusual Activity</div>
+    <div class="nav-tab" data-tab="fno" style="color:var(--accent-orange)">FNO Scanner</div>
     <div class="nav-tab" data-tab="history">History</div>
     <div class="nav-tab" data-tab="watchlist">Watchlist</div>
 </div>
@@ -504,6 +508,88 @@
             <div class="empty-state">
                 <i class="bi bi-lightning d-block"></i>
                 <p>No Unusual Activity data yet. Run the root main.py scraper.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ FNO SCANNER TAB ═══ -->
+    <div id="tab-fno" class="tab-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 style="font-weight:600;margin:0;"><i class="bi bi-speedometer2" style="color:var(--accent-orange)"></i> FNO Scanner (every 30 min, 09:00-16:15)</h5>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="card-subtitle" id="fnoLastUpdate">Last update: --</span>
+                <a class="btn-download btn-sm" href="/api/fno/download" style="background:linear-gradient(135deg,#ff9100,#e65100)"><i class="bi bi-download"></i> Download Excel</a>
+            </div>
+        </div>
+
+        <!-- FNO KPI Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-orange)">
+                    <div class="card-title">Total Contracts</div>
+                    <div class="card-value" id="fnoTotal" style="font-size:1.6rem">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-green)">
+                    <div class="card-title">Long Buildup</div>
+                    <div class="card-value text-bullish" id="fnoLongBU" style="font-size:1.6rem">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-red)">
+                    <div class="card-title">Short Buildup</div>
+                    <div class="card-value text-bearish" id="fnoShortBU" style="font-size:1.6rem">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-blue)">
+                    <div class="card-title">Short Covering</div>
+                    <div class="card-value" id="fnoShortCov" style="font-size:1.6rem;color:var(--accent-blue)">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--accent-orange)">
+                    <div class="card-title">Long Unwinding</div>
+                    <div class="card-value text-mixed" id="fnoLongUW" style="font-size:1.6rem">--</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="card-dark" style="border-left:3px solid var(--text-secondary)">
+                    <div class="card-title">Avg OI Change%</div>
+                    <div class="card-value" id="fnoAvgOI" style="font-size:1.6rem">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FNO Buildup Distribution + Signals -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card-dark">
+                    <div class="card-title">Buildup Distribution</div>
+                    <div id="fnoBuildupBars" class="mt-2">--</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card-dark">
+                    <div class="card-title">Actionable Signals</div>
+                    <div id="fnoSignalsList" class="mt-2" style="max-height:200px;overflow-y:auto">--</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card-dark">
+                    <div class="card-title">Active Symbols (<span id="fnoSymCount">0</span>)</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;max-height:200px;overflow-y:auto" id="fnoSymbolTags">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FNO Data Table -->
+        <h6 style="font-weight:600;margin-bottom:8px">FNO Data (Last 200 rows)</h6>
+        <div class="table-scroll" id="fnoTableContainer" style="max-height:500px">
+            <div class="empty-state">
+                <i class="bi bi-speedometer2 d-block"></i>
+                <p>No FNO Scanner data yet. Run: python fno_scanner.py</p>
             </div>
         </div>
     </div>
@@ -1084,9 +1170,162 @@ function renderUnusualActivity(data, statusData) {
     document.getElementById('uaTableContainer').innerHTML = html;
 }
 
+// ═══ Render: FNO Scanner ═══
+function renderFNOScanner(data, signalsData, statusData) {
+    if (!data) return;
+
+    const stats = data.stats || {};
+    const records = data.data || [];
+
+    if (statusData) {
+        document.getElementById('fnoLastUpdate').textContent = 'Last update: ' + (statusData.last_modified || '--');
+    }
+
+    // KPIs
+    document.getElementById('fnoTotal').textContent = stats.total || 0;
+    document.getElementById('fnoLongBU').textContent = stats.long_buildup || 0;
+    document.getElementById('fnoShortBU').textContent = stats.short_buildup || 0;
+    document.getElementById('fnoShortCov').textContent = stats.short_covering || 0;
+    document.getElementById('fnoLongUW').textContent = stats.long_unwinding || 0;
+
+    const avgOI = stats.avg_oi_chg || 0;
+    const avgOIEl = document.getElementById('fnoAvgOI');
+    avgOIEl.textContent = avgOI + '%';
+    avgOIEl.className = 'card-value ' + (avgOI >= 0 ? 'text-bullish' : 'text-bearish');
+    avgOIEl.style.fontSize = '1.6rem';
+
+    // Buildup bars
+    const buTotal = (stats.long_buildup||0) + (stats.short_buildup||0) + (stats.long_unwinding||0) + (stats.short_covering||0) + (stats.neutral||0) || 1;
+    const buItems = [
+        { label: 'Long Buildup', count: stats.long_buildup||0, color: 'var(--accent-green)' },
+        { label: 'Short Buildup', count: stats.short_buildup||0, color: 'var(--accent-red)' },
+        { label: 'Short Covering', count: stats.short_covering||0, color: 'var(--accent-blue)' },
+        { label: 'Long Unwinding', count: stats.long_unwinding||0, color: 'var(--accent-orange)' },
+        { label: 'Neutral', count: stats.neutral||0, color: 'var(--text-secondary)' },
+    ];
+    let buHtml = '';
+    for (const b of buItems) {
+        const pct = Math.round((b.count / buTotal) * 100);
+        buHtml += `<div style="margin-bottom:8px">
+            <div class="d-flex justify-content-between" style="font-size:0.75rem">
+                <span style="color:${b.color}">${b.label}</span>
+                <span>${b.count} (${pct}%)</span>
+            </div>
+            <div class="signal-bar" style="margin-top:2px"><div style="width:${pct}%;height:6px;background:${b.color};border-radius:3px"></div></div>
+        </div>`;
+    }
+    document.getElementById('fnoBuildupBars').innerHTML = buHtml;
+
+    // Signals
+    const signals = (signalsData && signalsData.signals) ? signalsData.signals : [];
+    if (signals.length > 0) {
+        let sigHtml = '';
+        for (const s of signals.slice(0, 20)) {
+            const sym = s.Symbol || s.symbol || '--';
+            const sig = s.Signal || s.signal || s['Signal Type'] || '--';
+            const strength = s.Strength || s.strength || '';
+            const sigUpper = String(sig).toUpperCase();
+            let cls = 'badge-mixed';
+            if (sigUpper.includes('LONG') && !sigUpper.includes('UNWIND')) cls = 'badge-bullish';
+            else if (sigUpper.includes('SHORT') && !sigUpper.includes('COVER')) cls = 'badge-bearish';
+            else if (sigUpper.includes('COVER')) cls = 'badge-bullish';
+            sigHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-color)">
+                <span style="font-weight:600;font-size:0.82rem">${esc(sym)}</span>
+                <span class="badge-signal ${cls}" style="font-size:0.68rem">${esc(sig)}${strength ? ' ('+esc(strength)+')' : ''}</span>
+            </div>`;
+        }
+        document.getElementById('fnoSignalsList').innerHTML = sigHtml;
+    } else {
+        document.getElementById('fnoSignalsList').innerHTML = '<span style="color:var(--text-secondary);font-size:0.8rem">No signals yet</span>';
+    }
+
+    // Symbol tags
+    const symbols = stats.symbols || [];
+    document.getElementById('fnoSymCount').textContent = symbols.length;
+    if (symbols.length > 0) {
+        let tagHtml = '';
+        for (const s of symbols.slice(0, 50)) {
+            tagHtml += `<span style="background:var(--bg-card-hover);padding:2px 8px;border-radius:4px;font-size:0.72rem;border:1px solid var(--border-color)">${esc(s)}</span>`;
+        }
+        if (symbols.length > 50) tagHtml += `<span style="color:var(--text-secondary);font-size:0.72rem">+${symbols.length-50} more</span>`;
+        document.getElementById('fnoSymbolTags').innerHTML = tagHtml;
+    } else {
+        document.getElementById('fnoSymbolTags').innerHTML = '<span style="color:var(--text-secondary)">No symbols yet</span>';
+    }
+
+    // Data table
+    if (records.length === 0) {
+        document.getElementById('fnoTableContainer').innerHTML = '<div class="empty-state"><i class="bi bi-speedometer2 d-block"></i><p>No FNO data yet.</p></div>';
+        return;
+    }
+
+    const fnoCols = [
+        { key: 'Symbol', label: 'Symbol' },
+        { key: 'Expiry', label: 'Expiry' },
+        { key: 'Type', label: 'CE/PE' },
+        { key: 'Strike', label: 'Strike' },
+        { key: 'LTP', label: 'LTP' },
+        { key: 'Price Change %', label: 'Price Chg%' },
+        { key: 'OI Change %', label: 'OI Chg%' },
+        { key: 'IV Change %', label: 'IV Chg%' },
+        { key: 'Volume', label: 'Volume' },
+        { key: 'Buildup Classification', label: 'Buildup' },
+        { key: 'Fetched At', label: 'Time' },
+    ];
+
+    // Handle alternate column names
+    function getFnoVal(row, key) {
+        let val = row[key];
+        if (val !== undefined && val !== null && val !== '') return val;
+        const alts = {
+            'Buildup Classification': ['Buildup Classification', 'Buildup', 'Builtup Type'],
+            'Price Change %': ['Price Change %', 'PriceChange%', 'Price Chg %'],
+            'OI Change %': ['OI Change %', 'OIChange%', 'OI Chg %'],
+            'IV Change %': ['IV Change %', 'IVChange%', 'IV Chg %'],
+        };
+        if (alts[key]) {
+            for (const a of alts[key]) {
+                if (row[a] !== undefined && row[a] !== null && row[a] !== '') return row[a];
+            }
+        }
+        return '';
+    }
+
+    let html = '<table class="data-table"><thead><tr>';
+    for (const c of fnoCols) html += `<th>${c.label}</th>`;
+    html += '</tr></thead><tbody>';
+
+    for (const row of records.slice().reverse()) {
+        html += '<tr>';
+        for (const c of fnoCols) {
+            const val = getFnoVal(row, c.key);
+            if (c.key.includes('Change %') || c.key.includes('Chg%')) {
+                html += `<td class="${pctColor(val)}" style="font-weight:600">${esc(val)}</td>`;
+            } else if (c.key === 'Buildup Classification') {
+                const bu = String(val).toUpperCase();
+                let cls = '';
+                if (bu.includes('LONG BUILDUP')) cls = 'text-bullish';
+                else if (bu.includes('SHORT BUILDUP')) cls = 'text-bearish';
+                else if (bu.includes('LONG UNWIND')) cls = 'text-mixed';
+                else if (bu.includes('SHORT COVER')) cls = 'text-bullish';
+                html += `<td class="${cls}" style="font-weight:600">${esc(val)}</td>`;
+            } else if (c.key === 'Type') {
+                const t = String(val).toUpperCase();
+                const sty = (t === 'CE' || t === 'CALL') ? 'color:var(--accent-blue)' : (t === 'PE' || t === 'PUT') ? 'color:var(--accent-orange)' : '';
+                html += `<td style="${sty};font-weight:600">${esc(val)}</td>`;
+            } else {
+                html += `<td>${esc(val)}</td>`;
+            }
+        }
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    document.getElementById('fnoTableContainer').innerHTML = html;
+}
+
 // ═══ Master Refresh ═══
 async function refreshAll() {
-    const [status, picks, triggers, history, summary, watchlist, uaData, uaStatus] = await Promise.all([
+    const [status, picks, triggers, history, summary, watchlist, uaData, uaStatus, fnoData, fnoSignals, fnoStatus] = await Promise.all([
         fetchJSON('/api/status'),
         fetchJSON('/api/picks'),
         fetchJSON('/api/triggers'),
@@ -1095,6 +1334,9 @@ async function refreshAll() {
         fetchJSON('/api/watchlist'),
         fetchJSON('/api/ua/data'),
         fetchJSON('/api/ua/status'),
+        fetchJSON('/api/fno/data'),
+        fetchJSON('/api/fno/signals'),
+        fetchJSON('/api/fno/status'),
     ]);
 
     if (status) updateStatus(status);
@@ -1107,6 +1349,7 @@ async function refreshAll() {
     if (history && summary) renderHistory(history, summary);
     if (watchlist) renderWatchlist(watchlist);
     if (uaData) renderUnusualActivity(uaData, uaStatus);
+    if (fnoData) renderFNOScanner(fnoData, fnoSignals, fnoStatus);
 }
 
 // ═══ Init ═══

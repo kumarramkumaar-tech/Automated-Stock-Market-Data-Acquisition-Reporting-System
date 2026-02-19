@@ -7,8 +7,9 @@
 # Features:
 #   - Option Triggers: Stock picks with full Columns A-N analysis
 #   - Unusual Activity: Unusual option activity data from Quantsapp
+#   - FNO Scanner: Full F&O market scanner with buildup, signals, IV anomalies
 #   - Auto-refresh every 10 minutes
-#   - Downloadable Excel from dashboard (both modules)
+#   - Downloadable Excel from dashboard (all modules)
 #   - Signal gauges (Bullish/Bearish/Mixed)
 #   - IV Percentile color bars
 #   - OI Strike visualization
@@ -42,6 +43,15 @@ if os.path.exists(UA_CONFIG_PATH):
     with open(UA_CONFIG_PATH) as f:
         ua_cfg = json.load(f)
 UA_OUTPUT_FILE = os.path.join(ROOT_DIR, ua_cfg.get("output_file", "output/Quantsapp_Unusual_Activity.xlsx"))
+
+# ── FNO Scanner Setup ────────────────────────────────────────
+FNO_DIR = os.path.join(ROOT_DIR, "projects", "fno_scanner")
+FNO_CONFIG_PATH = os.path.join(FNO_DIR, "config.json")
+fno_cfg = {}
+if os.path.exists(FNO_CONFIG_PATH):
+    with open(FNO_CONFIG_PATH) as f:
+        fno_cfg = json.load(f)
+FNO_OUTPUT_FILE = os.path.join(FNO_DIR, fno_cfg.get("output_file", "output/FNO_Scanner_Data.xlsx"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -295,6 +305,114 @@ def api_ua_download():
     )
 
 
+# ── FNO Scanner API Routes ────────────────────────────────────
+
+@app.route("/api/fno/status")
+def api_fno_status():
+    """FNO Scanner module status."""
+    file_exists = os.path.exists(FNO_OUTPUT_FILE)
+    last_modified = ""
+    if file_exists:
+        ts = os.path.getmtime(FNO_OUTPUT_FILE)
+        last_modified = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    return jsonify({
+        "file_exists": file_exists,
+        "last_modified": last_modified,
+        "output_file": FNO_OUTPUT_FILE,
+        "interval_minutes": fno_cfg.get("fetch_interval_minutes", 30),
+    })
+
+
+@app.route("/api/fno/data")
+def api_fno_data():
+    """FNO Scanner main data (last 200 rows)."""
+    df = _safe_read_sheet(FNO_OUTPUT_FILE, "FNO_Data")
+    if len(df) > 200:
+        df = df.tail(200)
+    records = _df_to_records(df)
+
+    # Compute stats
+    stats = {"total": len(records), "long_buildup": 0, "short_buildup": 0,
+             "long_unwinding": 0, "short_covering": 0, "neutral": 0,
+             "avg_price_chg": 0, "avg_oi_chg": 0, "avg_iv_chg": 0, "symbols": []}
+    if records:
+        for r in records:
+            bu = str(r.get("Buildup Classification", r.get("Buildup", ""))).upper()
+            if "LONG BUILDUP" in bu:
+                stats["long_buildup"] += 1
+            elif "SHORT BUILDUP" in bu:
+                stats["short_buildup"] += 1
+            elif "LONG UNWINDING" in bu or "LONG UNWIND" in bu:
+                stats["long_unwinding"] += 1
+            elif "SHORT COVERING" in bu or "SHORT COVER" in bu:
+                stats["short_covering"] += 1
+            else:
+                stats["neutral"] += 1
+
+        # Averages
+        for field, stat_key in [("Price Change %", "avg_price_chg"), ("OI Change %", "avg_oi_chg"), ("IV Change %", "avg_iv_chg")]:
+            vals = []
+            for r in records:
+                try:
+                    v = float(str(r.get(field, "0")).replace("%", "").replace(",", ""))
+                    vals.append(v)
+                except (ValueError, TypeError):
+                    pass
+            if vals:
+                stats[stat_key] = round(sum(vals) / len(vals), 2)
+
+        # Unique symbols
+        syms = set()
+        for r in records:
+            s = str(r.get("Symbol", "")).strip()
+            if s:
+                syms.add(s)
+        stats["symbols"] = sorted(syms)
+
+    return jsonify({"data": records, "stats": stats})
+
+
+@app.route("/api/fno/signals")
+def api_fno_signals():
+    """FNO Scanner actionable signals."""
+    df = _safe_read_sheet(FNO_OUTPUT_FILE, "Signals")
+    return jsonify({"signals": _df_to_records(df), "count": len(df)})
+
+
+@app.route("/api/fno/top-movers")
+def api_fno_top_movers():
+    """FNO Scanner top OI/IV/Price movers."""
+    oi_gainers = _safe_read_sheet(FNO_OUTPUT_FILE, "Top_OI_Gainers")
+    oi_losers = _safe_read_sheet(FNO_OUTPUT_FILE, "Top_OI_Losers")
+    iv_movers = _safe_read_sheet(FNO_OUTPUT_FILE, "Top_IV_Movers")
+    price_movers = _safe_read_sheet(FNO_OUTPUT_FILE, "Top_Price_Movers")
+    return jsonify({
+        "oi_gainers": _df_to_records(oi_gainers),
+        "oi_losers": _df_to_records(oi_losers),
+        "iv_movers": _df_to_records(iv_movers),
+        "price_movers": _df_to_records(price_movers),
+    })
+
+
+@app.route("/api/fno/buildup")
+def api_fno_buildup():
+    """FNO Scanner buildup summary."""
+    df = _safe_read_sheet(FNO_OUTPUT_FILE, "Buildup_Summary")
+    return jsonify({"buildup": _df_to_records(df), "count": len(df)})
+
+
+@app.route("/api/fno/download")
+def api_fno_download():
+    """Download the FNO Scanner Excel file."""
+    if not os.path.exists(FNO_OUTPUT_FILE):
+        return jsonify({"error": "No FNO Scanner file found yet."}), 404
+    return send_file(
+        FNO_OUTPUT_FILE,
+        as_attachment=True,
+        download_name=f"FNO_Scanner_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+    )
+
+
 # ── Main ─────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -307,7 +425,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("  STOCK MARKET DASHBOARD")
     print(f"  http://localhost:{port}")
-    print("  Modules: Option Triggers + Unusual Activity")
+    print("  Modules: Option Triggers + Unusual Activity + FNO Scanner")
     print("=" * 60)
     print()
 

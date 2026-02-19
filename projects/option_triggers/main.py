@@ -22,12 +22,33 @@
 #   6. Generates PDF visual reports per stock
 #   7. Sends Telegram announcement:
 #      "Stock Pick from WBRam Excel is <STOCK NAME>" + full analysis
+#
+# ── FNO Scanner Integration ─────────────────────────────────
+# The FNO Scanner module runs as a companion process alongside this script.
+# It provides the MAIN reference data file for all FNO trading analysis.
+#
+# FNO Scanner Schedule:
+#   - Runs every 30 minutes during market hours (09:00 AM - 04:15 PM IST)
+#   - Weekdays only (Mon-Fri)
+#   - Output: projects/fno_scanner/output/FNO_Scanner_Data.xlsx
+#   - Sheets: FNO_Data, Futures_Data, Signals, Top_OI_Gainers, Top_OI_Losers,
+#             Top_IV_Movers, Top_Price_Movers, Buildup_Summary, Daily_Summary
+#
+# How to run FNO Scanner alongside Option Triggers:
+#   Terminal 1: cd projects/option_triggers && python main.py
+#   Terminal 2: cd projects/fno_scanner && python fno_scanner.py
+#
+# The unified dashboard (python dashboard.py) reads from ALL modules:
+#   - Option Triggers: output/Option_Triggers_Analysis.xlsx
+#   - Unusual Activity: output/Quantsapp_Unusual_Activity.xlsx (root)
+#   - FNO Scanner:      projects/fno_scanner/output/FNO_Scanner_Data.xlsx
 
 import json
 import os
 import sys
 import time
 import logging
+import subprocess
 from datetime import datetime
 
 import pandas as pd
@@ -476,6 +497,85 @@ def guarded_cycle():
     run_cycle()
 
 
+# ── FNO Scanner Subprocess Management ────────────────────────
+# FNO Scanner runs every 30 minutes during standard market hours (09:00-16:15)
+# on weekdays only. It is the MAIN reference data file for all FNO trading analysis.
+
+FNO_SCANNER_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fno_scanner")
+FNO_SCANNER_SCRIPT = os.path.join(FNO_SCANNER_DIR, "fno_scanner.py")
+FNO_SCANNER_INTERVAL = 30  # minutes
+FNO_MARKET_OPEN_HOUR, FNO_MARKET_OPEN_MIN = 9, 0
+FNO_MARKET_CLOSE_HOUR, FNO_MARKET_CLOSE_MIN = 16, 15
+_fno_process = None
+
+
+def is_fno_market_hours():
+    """Check if current time is within FNO market hours (09:00-16:15, weekdays)."""
+    now = datetime.now()
+    # Weekdays only (0=Monday, 4=Friday)
+    if now.weekday() > 4:
+        return False
+    market_open = now.replace(hour=FNO_MARKET_OPEN_HOUR, minute=FNO_MARKET_OPEN_MIN, second=0, microsecond=0)
+    market_close = now.replace(hour=FNO_MARKET_CLOSE_HOUR, minute=FNO_MARKET_CLOSE_MIN, second=0, microsecond=0)
+    return market_open <= now <= market_close
+
+
+def start_fno_scanner():
+    """Launch FNO Scanner as a subprocess if not already running."""
+    global _fno_process
+    if not os.path.exists(FNO_SCANNER_SCRIPT):
+        logger.warning(f"FNO Scanner script not found: {FNO_SCANNER_SCRIPT}")
+        return
+
+    # Check if already running
+    if _fno_process is not None and _fno_process.poll() is None:
+        logger.info("FNO Scanner already running (PID %s)", _fno_process.pid)
+        return
+
+    if not is_fno_market_hours():
+        now = datetime.now().strftime("%H:%M:%S")
+        logger.info(f"FNO Scanner: outside market hours ({now}). "
+                     f"Active: {FNO_MARKET_OPEN_HOUR:02d}:{FNO_MARKET_OPEN_MIN:02d}-"
+                     f"{FNO_MARKET_CLOSE_HOUR:02d}:{FNO_MARKET_CLOSE_MIN:02d} weekdays")
+        return
+
+    logger.info("Starting FNO Scanner subprocess...")
+    try:
+        _fno_process = subprocess.Popen(
+            [sys.executable, FNO_SCANNER_SCRIPT],
+            cwd=FNO_SCANNER_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        logger.info(f"FNO Scanner started (PID {_fno_process.pid})")
+        send_telegram(f"FNO Scanner started (PID {_fno_process.pid}) — "
+                       f"every {FNO_SCANNER_INTERVAL} min during 09:00-16:15 weekdays")
+    except Exception as e:
+        logger.error(f"Failed to start FNO Scanner: {e}")
+
+
+def stop_fno_scanner():
+    """Stop the FNO Scanner subprocess if running."""
+    global _fno_process
+    if _fno_process is not None and _fno_process.poll() is None:
+        logger.info(f"Stopping FNO Scanner (PID {_fno_process.pid})...")
+        _fno_process.terminate()
+        try:
+            _fno_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            _fno_process.kill()
+        logger.info("FNO Scanner stopped.")
+    _fno_process = None
+
+
+def check_fno_scanner():
+    """Scheduled check: start FNO Scanner during market hours, stop outside."""
+    if is_fno_market_hours():
+        start_fno_scanner()
+    else:
+        stop_fno_scanner()
+
+
 # ── Scheduler ────────────────────────────────────────────────
 
 interval = cfg.get("fetch_interval_minutes", 40)
@@ -516,20 +616,32 @@ else:
 # Schedule every 40 minutes (guarded by market hours check)
 schedule.every(interval).minutes.do(guarded_cycle)
 
+# ── FNO Scanner: Start on boot + check every 30 minutes ─────
+check_fno_scanner()
+schedule.every(FNO_SCANNER_INTERVAL).minutes.do(check_fno_scanner)
+
 # Daily summary at 16:15 (market close)
 schedule.every().day.at("16:15").do(lambda: (
     generate_summary_report(cfg["output_file"]),
     send_telegram("Market closed (04:15 PM). Daily summary generated."),
 ))
 
+# Stop FNO Scanner at market close
+schedule.every().day.at("16:16").do(stop_fno_scanner)
+
 # Start-of-day notification
 schedule.every().day.at("08:30").do(
     lambda: send_telegram(f"Market open. Option Triggers scanning started. Hours: {_market_hours_label()}")
 )
 
+# Start FNO Scanner at 09:00 on weekdays
+schedule.every().day.at("09:00").do(start_fno_scanner)
+
 print()
 print(f"Running every {interval} minutes during market hours ({_hours_label}{_mode_note}).")
+print(f"FNO Scanner: every {FNO_SCANNER_INTERVAL} min during 09:00-16:15 (weekdays)")
 print(f"Output file: {cfg['output_file']}")
+print(f"FNO output:  {FNO_SCANNER_DIR}/output/FNO_Scanner_Data.xlsx")
 print(f"Reports: reports/")
 print()
 
@@ -542,6 +654,7 @@ except KeyboardInterrupt:
     stop_msg = "Option Triggers automation stopped by user."
     print("\n" + stop_msg)
     logger.info(stop_msg)
+    stop_fno_scanner()
     try:
         send_telegram(stop_msg)
     except Exception:
