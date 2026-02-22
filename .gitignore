@@ -13,6 +13,9 @@ __pycache__/
 *.xlsx
 *.pdf
 
+# Gaussian analyzer data (user-specific history)
+data/
+
 # System files
 .DS_Store
 Thumbs.db

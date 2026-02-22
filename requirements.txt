@@ -4,3 +4,11 @@ pandas
 openpyxl
 schedule
 python-dotenv
+
+# Gaussian Chart Analyzer dependencies
+streamlit
+numpy
+scipy
+matplotlib
+opencv-python-headless
+pytesseract
