@@ -80,6 +80,12 @@ def _detect_chart_region(img: np.ndarray) -> Tuple[int, int, int, int]:
         y_start = int(h * 0.05)
         y_end = int(h * 0.85)
 
+    # Ensure valid region: coordinates in bounds and region has positive area
+    x_start = max(0, min(x_start, w - 2))
+    x_end = max(x_start + 1, min(x_end, w))
+    y_start = max(0, min(y_start, h - 2))
+    y_end = max(y_start + 1, min(y_end, h))
+
     return x_start, y_start, x_end, y_end
 
 
@@ -132,6 +138,10 @@ def _detect_volume_bars(img: np.ndarray, chart_region: Tuple[int, int, int, int]
     """
     x_start, y_start, x_end, y_end = chart_region
     chart_crop = img[y_start:y_end, x_start:x_end]
+
+    if chart_crop.size == 0:
+        return []
+
     h, w = chart_crop.shape[:2]
 
     # Convert to HSV to detect colored bars
@@ -198,6 +208,10 @@ def _detect_candlesticks_and_line(img: np.ndarray,
     """
     x_start, y_start, x_end, y_end = chart_region
     chart_crop = img[y_start:y_end, x_start:x_end]
+
+    if chart_crop.size == 0:
+        return []
+
     h, w = chart_crop.shape[:2]
 
     # Convert to grayscale and detect prominent lines
