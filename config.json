@@ -6,13 +6,5 @@
   "headless": false,
   "max_table_wait_seconds": 15,
   "auto_refresh_page": true,
-  "max_retry_attempts": 3,
-
-  "premarket_news": {
-    "enabled": true,
-    "schedule_time": "08:02",
-    "source_url": "https://economictimes.indiatimes.com/markets/stocks/news",
-    "article_count": 3,
-    "telegram_chat_id_env": "TELEGRAM_CHAT_ID_PREMARKET"
-  }
+  "max_retry_attempts": 3
 }

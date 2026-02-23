@@ -2,6 +2,8 @@
 Pre-Market News Scraper — Economic Times Prime
 Fetches top 3 pre-market news articles, extracts key figures,
 formats as structured Telegram messages with tables.
+
+Standalone project — runs independently from the Quantsapp automation.
 """
 
 import os
@@ -12,7 +14,6 @@ import pickle
 import logging
 from datetime import datetime
 
-import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -23,13 +24,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from dotenv import load_dotenv
 
+from helpers.notify import send_telegram_html
+
 load_dotenv()
 
 # --- Configuration ---
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID_PREMARKET = os.getenv(
-    "TELEGRAM_CHAT_ID_PREMARKET", os.getenv("TELEGRAM_CHAT_ID")
-)
 ET_PRIME_EMAIL = os.getenv("ET_PRIME_EMAIL")
 ET_PRIME_PASSWORD = os.getenv("ET_PRIME_PASSWORD")
 
@@ -116,7 +115,7 @@ def fetch_article_links(driver, count=3):
     links = []
     seen = set()
 
-    # Strategy 1: story list items
+    # Multiple CSS selectors — ET changes layout frequently
     selectors = [
         "div.eachStory h3 a",
         "div.clr.flt.topnews a",
@@ -149,7 +148,7 @@ def fetch_article_links(driver, count=3):
         if len(links) >= count:
             break
 
-    # Strategy 2: fallback — all <a> tags with /articleshow/
+    # Fallback — scan all <a> tags for article links
     if len(links) < count:
         try:
             all_a = driver.find_elements(By.TAG_NAME, "a")
@@ -185,10 +184,9 @@ def extract_article_content(driver, url, title):
         driver.get(url)
         time.sleep(3)
 
-        # Parse the loaded page with BeautifulSoup (more reliable than Selenium selectors)
         soup = BeautifulSoup(driver.page_source, "html.parser")
 
-        # Extract article text — try multiple selectors
+        # Extract article text
         body_selectors = [
             "div.artText",
             "div.article_content",
@@ -206,30 +204,28 @@ def extract_article_content(driver, url, title):
                 break
 
         if not full_text:
-            # Fallback: collect all <p> tags
             paragraphs = soup.find_all("p")
             full_text = " ".join(p.get_text(strip=True) for p in paragraphs[:10])
 
-        # Summarise: first 3 sentences
+        # Summary: first 3 sentences
         sentences = re.split(r"(?<=[.!?])\s+", full_text)
         article["summary"] = " ".join(sentences[:3]).strip()
         if len(article["summary"]) > 500:
             article["summary"] = article["summary"][:497] + "..."
 
         # ── Extract key figures / numbers ──
-        # Pattern: look for market indices, percentages, currency values
         figure_patterns = [
-            # Index values  e.g. "Sensex 76,450" or "Nifty 23,180.50"
+            # Index values
             (
                 r"((?:Sensex|Nifty|BSE|NSE|Bank\s*Nifty|SGX\s*Nifty|Dow|Nasdaq|S&P)\s*"
                 r"[\w]*\s*(?:rose|fell|gained|lost|at|jumped|slipped|closed|opened)?\s*"
                 r"[\d,]+\.?\d*\s*(?:points?|%)?)"
             ),
-            # Percentage moves  e.g. "+1.5%", "surged 3.2 per cent"
+            # Percentage moves
             (r"([+-]?\d+[.,]?\d*\s*(?:%|per\s*cent|percent|bps|basis\s*points))"),
             # Rupee / Dollar amounts
             (r"((?:Rs\.?|₹|INR|\$|USD)\s*[\d,]+\.?\d*\s*(?:crore|lakh|billion|million|trillion)?)"),
-            # Generic large numbers with context
+            # Large numbers with units
             (r"(\d[\d,]*\.?\d*\s+(?:crore|lakh|billion|million|trillion))"),
         ]
 
@@ -237,7 +233,6 @@ def extract_article_content(driver, url, title):
         for pat in figure_patterns:
             raw_figures.extend(re.findall(pat, full_text, re.IGNORECASE))
 
-        # Deduplicate while preserving order
         seen_figs = set()
         for fig in raw_figures:
             cleaned = fig.strip()
@@ -264,7 +259,7 @@ def format_telegram_message(articles):
     time_str = now.strftime("%I:%M %p")
 
     lines = [
-        f"<b>📰 PRE-MARKET NEWS SUMMARY</b>",
+        "<b>📰 PRE-MARKET NEWS SUMMARY</b>",
         f"📅 {date_str}  |  ⏰ {time_str}",
         "━" * 30,
         "",
@@ -276,7 +271,6 @@ def format_telegram_message(articles):
         lines.append(_escape_html(art.get("summary", "—")))
         lines.append("")
 
-        # Numbers table
         if art.get("figures"):
             table_lines = _build_table("Key Figures", art["figures"])
             lines.append("<pre>")
@@ -288,7 +282,7 @@ def format_telegram_message(articles):
         lines.append("─" * 30)
         lines.append("")
 
-    lines.append("<i>Source: Economic Times</i>")
+    lines.append("<i>Source: Economic Times Prime</i>")
     lines.append(f"<i>Auto-generated at {time_str}</i>")
 
     return "\n".join(lines)
@@ -320,61 +314,6 @@ def _escape_html(text):
 
 
 # ──────────────────────────────────────────────
-# Telegram delivery
-# ──────────────────────────────────────────────
-def send_telegram_html(message, chat_id=None):
-    """Send an HTML-formatted message to Telegram (supports channels)."""
-    token = TELEGRAM_TOKEN
-    cid = chat_id or TELEGRAM_CHAT_ID_PREMARKET
-
-    if not token or not cid:
-        print("[WARN] Telegram credentials missing (TELEGRAM_TOKEN / TELEGRAM_CHAT_ID_PREMARKET)")
-        return False
-
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {
-        "chat_id": cid,
-        "text": message,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-    }
-
-    try:
-        resp = requests.post(url, json=payload, timeout=30)
-        if resp.status_code == 200:
-            logger.info("Telegram message sent to %s", cid)
-            return True
-        else:
-            logger.error("Telegram send failed: %s — %s", resp.status_code, resp.text)
-            # If message too long, split and retry
-            if resp.status_code == 400 and "message is too long" in resp.text.lower():
-                return _send_split_message(message, token, cid)
-            return False
-    except Exception as e:
-        logger.error("Telegram send error: %s", e)
-        return False
-
-
-def _send_split_message(message, token, chat_id):
-    """Split a long message and send in parts."""
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    parts = message.split("─" * 30)
-    for i, part in enumerate(parts):
-        payload = {
-            "chat_id": chat_id,
-            "text": part.strip() or "—",
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        }
-        try:
-            requests.post(url, json=payload, timeout=30)
-            time.sleep(0.5)
-        except Exception as e:
-            logger.error("Split-send part %d failed: %s", i, e)
-    return True
-
-
-# ──────────────────────────────────────────────
 # Main entry point
 # ──────────────────────────────────────────────
 def run_premarket_summary():
@@ -385,17 +324,15 @@ def run_premarket_summary():
 
     driver = None
     try:
-        # Try headless first (with saved cookies)
         driver = create_driver(headless=True)
         cookie_loaded = load_cookies(driver)
 
         if not cookie_loaded:
-            # No cookies — need interactive login
             driver.quit()
             driver = create_driver(headless=False)
             interactive_login(driver)
 
-        # Fetch articles
+        # Fetch article links
         article_links = fetch_article_links(driver, count=3)
 
         if not article_links:
@@ -404,17 +341,15 @@ def run_premarket_summary():
             send_telegram_html(msg)
             return
 
-        # Extract content from each article
+        # Extract content
         articles = []
         for title, url in article_links:
             art = extract_article_content(driver, url, title)
             articles.append(art)
             print(f"  ✓ {title[:60]}...")
 
-        # Format message
+        # Format and send
         message = format_telegram_message(articles)
-
-        # Send to Telegram
         success = send_telegram_html(message)
         status = "sent" if success else "FAILED to send"
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Pre-market summary {status} ({len(articles)} articles)")

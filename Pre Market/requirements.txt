@@ -1,6 +1,7 @@
 selenium
 webdriver-manager
-pandas
-openpyxl
+beautifulsoup4
+lxml
+requests
 schedule
 python-dotenv

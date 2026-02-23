@@ -3,12 +3,16 @@ Pre-Market News Scheduler
 Runs the ET Prime news summary every day at 08:02 AM IST
 and sends it to the configured Telegram channel.
 
+Standalone project — place this folder at:
+    D:\\Python Mini\\Pre Market
+
 Usage:
-    python run_premarket_news.py              # start scheduler (runs daily at 08:02)
-    python run_premarket_news.py --now        # run once immediately (for testing)
+    python run_premarket_news.py              # start scheduler (daily at 08:02)
+    python run_premarket_news.py --now        # run once immediately (testing)
     python run_premarket_news.py --login      # open browser for ET Prime login
 """
 
+import os
 import sys
 import time
 import logging
@@ -19,6 +23,7 @@ import schedule
 from premarket_news import run_premarket_summary, create_driver, interactive_login
 
 # --- Logging ---
+os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -42,9 +47,6 @@ def handle_login():
 
 
 def main():
-    import os
-    os.makedirs("logs", exist_ok=True)
-
     # --- CLI flags ---
     if "--login" in sys.argv:
         handle_login()
