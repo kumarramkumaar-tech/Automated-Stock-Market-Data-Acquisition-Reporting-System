@@ -1,13 +1,13 @@
 """
 Pre-Market News Scheduler
-Runs the ET Prime news summary every day at 08:02 AM IST
+Runs the ET news summary every 2 hours from 08:00 to 15:00 IST
 and sends it to the configured Telegram channel.
 
 Standalone project — place this folder at:
     D:\\Python Mini\\Pre Market
 
 Usage:
-    python run_premarket_news.py              # start scheduler (daily at 08:02)
+    python run_premarket_news.py              # start scheduler (every 2h, 08–15)
     python run_premarket_news.py --now        # run once immediately (testing)
     python run_premarket_news.py --test       # test Telegram bot connectivity
     python run_premarket_news.py --login      # open browser for ET Prime login
@@ -36,7 +36,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("premarket_scheduler")
 
-SCHEDULE_TIME = "08:02"
+# Every 2 hours from 08:00 to 15:00 (market hours)
+SCHEDULE_TIMES = ["08:00", "10:00", "12:00", "14:00"]
 
 
 def handle_login():
@@ -62,16 +63,18 @@ def main():
         run_premarket_summary()
         return
 
-    # --- Schedule daily job ---
-    schedule.every().day.at(SCHEDULE_TIME).do(run_premarket_summary)
+    # --- Schedule jobs every 2 hours from 08:00 to 14:00 ---
+    for t in SCHEDULE_TIMES:
+        schedule.every().day.at(t).do(run_premarket_summary)
 
+    times_str = ", ".join(SCHEDULE_TIMES)
     print("┌─────────────────────────────────────────────────────┐")
-    print("│  Pre-Market News Scheduler                          │")
-    print(f"│  Scheduled at: {SCHEDULE_TIME} AM every day               │")
+    print("│  Market News Scheduler                              │")
+    print(f"│  Runs at: {times_str}          │")
     print("│  Target: Telegram @MarketprofileNoteBoOk            │")
     print("│  Press Ctrl+C to stop                               │")
     print("└─────────────────────────────────────────────────────┘")
-    logger.info("Scheduler started — next run at %s", SCHEDULE_TIME)
+    logger.info("Scheduler started — runs at %s", times_str)
 
     try:
         while True:
