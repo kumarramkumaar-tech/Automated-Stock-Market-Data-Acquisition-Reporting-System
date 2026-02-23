@@ -1,10 +1,10 @@
 """
 FNO Scanner - Standalone Python Script
 ========================================
-Scrapes FNO Scanner data from Quantsapp (under Tools tab).
+Scrapes FNO Scanner data from the web platform (under Tools tab).
 
 Workflow:
-1. Opens Quantsapp FNO Scanner page
+1. Opens FNO Scanner page
 2. Manual OTP login by user
 3. Sets filters: Instrument=ALL, Expiry=ALL, Price Change, OI Change, IV Change %
 4. Clicks Play to execute scan
@@ -143,21 +143,21 @@ def select_dropdown_option(driver, dropdown_selector, option_text, timeout=10):
 
 def apply_filters(driver, filters):
     """
-    Apply FNO Scanner filters on the Quantsapp page.
+    Apply FNO Scanner filters on the page.
 
     Attempts to set:
     - Instrument: ALL
     - Expiry: ALL
     - Price Change, OI Change, IV Change % filters
 
-    NOTE: The exact CSS selectors depend on Quantsapp's page structure.
+    NOTE: The exact CSS selectors depend on the page structure.
     These may need adjustment based on the actual DOM.
     """
     logger.info("Applying FNO Scanner filters...")
     print("Attempting to apply filters automatically...")
 
     try:
-        # Try common dropdown/filter selectors for Quantsapp FNO Scanner
+        # Try common dropdown/filter selectors for FNO Scanner
         # Instrument dropdown
         instrument_selectors = [
             "select[name*='instrument']",
@@ -654,7 +654,7 @@ def run_cycle(driver):
 def main():
     """Main entry point for FNO Scanner."""
     print("=" * 60)
-    print("  FNO Scanner - Quantsapp Automation")
+    print("  FNO Scanner - Stock Market Automation")
     print("  Standalone Python Script")
     print("=" * 60)
 
@@ -671,7 +671,7 @@ def main():
         # Manual login step
         print("\n" + "-" * 60)
         print("MANUAL STEPS REQUIRED:")
-        print("  1. Login with OTP on the Quantsapp page")
+        print("  1. Login with OTP on the page")
         print("  2. Navigate to Tools > FNO Scanner")
         print("  3. Set filters:")
         print(f"     - Instrument: {cfg['filters']['instrument']}")

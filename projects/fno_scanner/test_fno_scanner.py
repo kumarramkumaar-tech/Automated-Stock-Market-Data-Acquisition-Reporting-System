@@ -1,6 +1,6 @@
 """
 Test script: Simulates FNO Scanner data and runs the full analysis pipeline.
-Generates sample FNO data resembling Quantsapp FNO Scanner output,
+Generates sample FNO data resembling FNO Scanner output,
 then runs data analysis, Excel export, formatting, and visual reports.
 """
 import os

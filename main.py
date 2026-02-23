@@ -110,7 +110,7 @@ def run_cycle():
             raise PermissionError("Excel file still locked after 3 attempts.")
 
         # Success actions
-        msg = f"✅ Quantsapp fetch complete — {len(df)} rows added at {datetime.now().strftime('%H:%M:%S')}"
+        msg = f"✅ FNO Scanner fetch complete — {len(df)} rows added at {datetime.now().strftime('%H:%M:%S')}"
         print(msg)
         logging.info(msg)
         send_telegram(msg)
@@ -145,7 +145,7 @@ schedule.every().day.at("23:59").do(lambda: update_summary(cfg["output_file"]))
 schedule.every().day.at("23:59").do(lambda: generate_visual_report(cfg["output_file"]))
 
 # --- Manual test: run report generation now ---
-generate_visual_report("output/Quantsapp_Unusual_Activity.xlsx")
+generate_visual_report("output/FNO_Scanner_Unusual_Activity.xlsx")
 
 print(f"Running every {cfg['fetch_interval_minutes']} minutes. Press Ctrl+C to stop safely.")
 

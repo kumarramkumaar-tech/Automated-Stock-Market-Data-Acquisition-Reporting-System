@@ -21,7 +21,7 @@ def generate_visual_report(file_path: str):
         plt.plot(df["Date"], df["Avg Change %"], marker="o", label="Avg Change %")
         plt.plot(df["Date"], df["Max Change %"], "--", label="Max Change %")
         plt.plot(df["Date"], df["Min Change %"], "--", label="Min Change %")
-        plt.title("Quantsapp Daily Performance")
+        plt.title("FNO Scanner Daily Performance")
         plt.xlabel("Date")
         plt.ylabel("Change %")
         plt.legend()
@@ -31,7 +31,7 @@ def generate_visual_report(file_path: str):
         today = datetime.now().strftime("%Y-%m-%d")
         report_dir = "reports"
         os.makedirs(report_dir, exist_ok=True)
-        pdf_path = os.path.join(report_dir, f"Quantsapp_Report_{today}.pdf")
+        pdf_path = os.path.join(report_dir, f"FNO_Scanner_Report_{today}.pdf")
         plt.tight_layout()
         plt.savefig(pdf_path)
         plt.close()

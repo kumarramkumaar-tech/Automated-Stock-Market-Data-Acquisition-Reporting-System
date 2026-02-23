@@ -59,7 +59,7 @@ def update_summary(file_path: str):
         if not today_row.empty:
             r = today_row.iloc[0]
             msg = (
-                f"📊 *Quantsapp Daily Summary ({today})*\n"
+                f"📊 *FNO Scanner Daily Summary ({today})*\n"
                 f"• Total Entries: {int(r['Total Rows'])}\n"
                 f"• Avg Change %: {r['Avg Change %']}\n"
                 f"• Max Change %: {r['Max Change %']}\n"
