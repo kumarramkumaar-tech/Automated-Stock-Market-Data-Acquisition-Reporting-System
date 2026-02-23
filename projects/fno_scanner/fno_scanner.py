@@ -48,11 +48,16 @@ from helpers.report_visuals import generate_fno_visual_report, generate_daily_su
 
 
 # ============================================================
+# Base directory (script's own folder)
+# ============================================================
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ============================================================
 # Logging setup
 # ============================================================
-os.makedirs("logs", exist_ok=True)
+os.makedirs(os.path.join(SCRIPT_DIR, "logs"), exist_ok=True)
 logging.basicConfig(
-    filename="logs/fno_scanner.log",
+    filename=os.path.join(SCRIPT_DIR, "logs", "fno_scanner.log"),
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -61,8 +66,26 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # Load configuration
 # ============================================================
-with open("config.json") as f:
+_config_path = os.path.join(SCRIPT_DIR, "config.json")
+with open(_config_path) as f:
     cfg = json.load(f)
+
+# Ensure 'filters' key exists with defaults
+if "filters" not in cfg:
+    cfg["filters"] = {
+        "instrument": "ALL",
+        "expiry": "ALL",
+        "price_change": "",
+        "oi_change": "",
+        "iv_change_pct": "",
+        "segment": "FNO"
+    }
+    logger.warning("'filters' missing from config.json – using defaults")
+
+# Resolve output_file path relative to script directory
+if not os.path.isabs(cfg.get("output_file", "")):
+    cfg["output_file"] = os.path.join(SCRIPT_DIR, cfg["output_file"])
+os.makedirs(os.path.dirname(cfg["output_file"]), exist_ok=True)
 
 
 # ============================================================
