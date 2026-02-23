@@ -9,7 +9,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID_PREMARKET", os.getenv("TELEGRAM_CHAT_ID"))
+CHAT_ID_CHANNEL = os.getenv("TELEGRAM_CHAT_ID_PREMARKET")
+CHAT_ID_PERSONAL = os.getenv("TELEGRAM_CHAT_ID")
+CHAT_ID = CHAT_ID_CHANNEL or CHAT_ID_PERSONAL
 
 logger = logging.getLogger("premarket_news")
 
@@ -51,6 +53,10 @@ def send_telegram_html(message, chat_id=None):
         # If message too long, split and retry
         if resp.status_code == 400 and "message is too long" in resp.text.lower():
             return _send_split(message, cid)
+        # If channel send failed, fallback to personal chat
+        if cid == CHAT_ID_CHANNEL and CHAT_ID_PERSONAL:
+            logger.warning("Channel send failed (%s). Trying personal chat %s...", resp.status_code, CHAT_ID_PERSONAL)
+            return send_telegram_html(message, chat_id=CHAT_ID_PERSONAL)
         logger.error("Telegram failed: %s — %s", resp.status_code, resp.text)
         return False
     except Exception as e:
