@@ -9,6 +9,7 @@ Standalone project — place this folder at:
 Usage:
     python run_premarket_news.py              # start scheduler (daily at 08:02)
     python run_premarket_news.py --now        # run once immediately (testing)
+    python run_premarket_news.py --test       # test Telegram bot connectivity
     python run_premarket_news.py --login      # open browser for ET Prime login
 """
 
@@ -21,6 +22,7 @@ from datetime import datetime
 import schedule
 
 from premarket_news import run_premarket_summary, create_driver, interactive_login
+from helpers.notify import test_telegram_connection
 
 # --- Logging ---
 os.makedirs("logs", exist_ok=True)
@@ -48,6 +50,10 @@ def handle_login():
 
 def main():
     # --- CLI flags ---
+    if "--test" in sys.argv:
+        test_telegram_connection()
+        return
+
     if "--login" in sys.argv:
         handle_login()
         return
